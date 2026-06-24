@@ -18,6 +18,31 @@ print("Maskinen er placeret på baseplaten!")  -- 8. Skriv en besked i Output
 local kapacitet = 50                      -- Maks hvor meget maskinen kan rumme
 maskine:SetAttribute("Indhold", 0)        -- Maskinen starter tom (0 penge inde i sig)
 
+
+-- === FASE 3: Tøm fiskeren ved at røre ham ===
+
+local Players = game:GetService("Players")   -- Giver os adgang til spillerne i spillet
+
+maskine.Touched:Connect(function(andetObjekt)
+	local figur = andetObjekt.Parent          -- Det, der rørte fiskeren, hører til en "figur"
+	local spiller = Players:GetPlayerFromCharacter(figur)  -- Er den figur en spiller?
+
+	if spiller then                           -- Ja, det var en rigtig spiller
+		local fiskIFiskeren = maskine:GetAttribute("Indhold")  -- Hvor mange fisk har han?
+
+		if fiskIFiskeren > 0 then             -- Er der overhovedet noget at hente?
+			local mineFisk = spiller:GetAttribute("Fisk") or 0  -- Mine fisk indtil nu (0 hvis tom)
+			mineFisk = mineFisk + fiskIFiskeren                 -- Læg fiskerens fisk til mine
+			spiller:SetAttribute("Fisk", mineFisk)             -- Gem totalen på mig (spilleren)
+
+			maskine:SetAttribute("Indhold", 0)                 -- Tøm fiskeren, så han kan fange igen
+
+			print("Dine fisk: " .. mineFisk)                   -- Vis min samlede total
+		end
+	end
+end)
+
+
 while true do                             -- Gentag for evigt...
 	task.wait(1)                          -- ...vent 1 sekund mellem hver gang
 
