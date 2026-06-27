@@ -30,7 +30,7 @@ hjoerne.Parent = boks
 -- 3. Opskrift: skriv mine nuværende fisk i boksen
 local function opdaterHud()
 	local mineFisk = spiller:GetAttribute("Fisk") or 0   -- mine fisk (0 hvis ingen endnu)
-	boks.Text = "Fisk: " .. mineFisk
+	boks.Text = "Fish: " .. mineFisk
 end
 
 opdaterHud()                                   -- Vis "Fisk: 0" med det samme
