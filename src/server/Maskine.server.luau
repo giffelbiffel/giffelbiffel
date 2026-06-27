@@ -1,26 +1,57 @@
 -- Maskine.server.luau
--- Fiskeri-tycoon (server). Tre fisker-typer + en shop man kan købe fra.
+-- Fiskeri-tycoon (server). Nu med ÉT plot: fiskerne står på min grund,
+-- og shoppen står centralt i midten af banen.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Walkie-talkien mellem client og server. Vi laver den her, og client finder den.
+-- Walkie-talkien mellem client og server
 local buyFisher = Instance.new("RemoteEvent")
 buyFisher.Name = "BuyFisher"
 buyFisher.Parent = ReplicatedStorage
 
 
--- === Hvor skal næste fisker stå? ===
--- Vi rykker 8 til siden for hver ny fisker, så de ikke står oven i hinanden.
-local naesteX = 0
+-- === PLOT 1 (min grund) ===
+-- Plottets centrum. Senere kan plot 2, 3, ... stå ved siden af i +X retning.
+local PLOT_POSITION = Vector3.new(0, 0.5, -60)
+
+local plot = Instance.new("Part")
+plot.Name = "Plot1"
+plot.Size = Vector3.new(40, 1, 40)             -- stor, flad plade (40x40)
+plot.Position = PLOT_POSITION
+plot.Anchored = true
+plot.Material = Enum.Material.Grass
+plot.BrickColor = BrickColor.new("Bright green")
+plot.Parent = workspace
+
+-- Skilt "PLOT 1" over pladen
+local plotSkilt = Instance.new("BillboardGui")
+plotSkilt.Size = UDim2.new(0, 200, 0, 50)
+plotSkilt.StudsOffset = Vector3.new(0, 6, 0)
+plotSkilt.AlwaysOnTop = true
+plotSkilt.Parent = plot
+
+local plotTekst = Instance.new("TextLabel")
+plotTekst.Size = UDim2.new(1, 0, 1, 0)
+plotTekst.BackgroundTransparency = 1
+plotTekst.Font = Enum.Font.GothamBold
+plotTekst.TextScaled = true
+plotTekst.TextColor3 = Color3.fromRGB(255, 255, 255)
+plotTekst.Text = "PLOT 1"
+plotTekst.Parent = plotSkilt
+
+
+-- === Hvor skal næste fisker stå PÅ plottet? ===
+-- Vi placerer fiskerne i en række oven på pladen, fra venstre mod højre.
+local fiskerNr = 0
 local function naestePosition()
-	local position = Vector3.new(naesteX, 2, 0)
-	naesteX = naesteX + 8
-	return position
+	local lokalX = -12 + fiskerNr * 8          -- -12, -4, 4, 12, ... hen over pladen
+	fiskerNr = fiskerNr + 1
+	return Vector3.new(PLOT_POSITION.X + lokalX, 3, PLOT_POSITION.Z)  -- y=3 = oven på pladen
 end
 
 
--- === OPSKRIFT: lav én fisker med sine egne værdier ===
+-- === OPSKRIFT: lav én fisker ===
 local function lavFisker(navn, position, kapacitet, sekunderPrFisk)
 	local fisker = Instance.new("Part")
 	fisker.Name = navn
@@ -31,7 +62,6 @@ local function lavFisker(navn, position, kapacitet, sekunderPrFisk)
 	fisker.Parent = workspace
 	fisker:SetAttribute("Indhold", 0)
 
-	-- Svævende skilt
 	local skilt = Instance.new("BillboardGui")
 	skilt.Size = UDim2.new(0, 200, 0, 50)
 	skilt.StudsOffset = Vector3.new(0, 3, 0)
@@ -57,7 +87,6 @@ local function lavFisker(navn, position, kapacitet, sekunderPrFisk)
 	end
 	opdaterSkilt()
 
-	-- Tøm ved berøring
 	fisker.Touched:Connect(function(andetObjekt)
 		local spiller = Players:GetPlayerFromCharacter(andetObjekt.Parent)
 		if spiller then
@@ -71,7 +100,6 @@ local function lavFisker(navn, position, kapacitet, sekunderPrFisk)
 		end
 	end)
 
-	-- Fang fisk over tid (egen tråd)
 	task.spawn(function()
 		while true do
 			task.wait(sekunderPrFisk)
@@ -85,17 +113,17 @@ local function lavFisker(navn, position, kapacitet, sekunderPrFisk)
 end
 
 
--- === De tre start-fiskere ===
+-- === De tre start-fiskere (nu placeret PÅ plottet) ===
 lavFisker("BasicFisher",  naestePosition(), 50,  3)
 lavFisker("BetterFisher", naestePosition(), 100, 2)
 lavFisker("TopFisher",    naestePosition(), 200, 1)
 
 
--- === SHOP-manden (fysisk objekt i verdenen) ===
+-- === SHOP-manden (centralt i midten af banen, IKKE på plottet) ===
 local shop = Instance.new("Part")
 shop.Name = "Shop"
 shop.Size = Vector3.new(4, 6, 4)
-shop.Position = Vector3.new(8, 3, 14)          -- står lidt foran fiskerne
+shop.Position = Vector3.new(0, 3, 0)           -- midten af banen
 shop.Anchored = true
 shop.BrickColor = BrickColor.new("Bright blue")
 shop.Parent = workspace
@@ -116,19 +144,19 @@ shopTekst.Text = "SHOP"
 shopTekst.Parent = shopSkilt
 
 
--- === KØBET (sker på serveren — her bestemmes reglerne) ===
+-- === KØBET (sker på serveren) ===
 local PRIS = 50
 
 buyFisher.OnServerEvent:Connect(function(spiller)
 	local mineFisk = spiller:GetAttribute("Fisk") or 0
 
 	if mineFisk >= PRIS then
-		spiller:SetAttribute("Fisk", mineFisk - PRIS)       -- træk prisen
-		lavFisker("BasicFisher", naestePosition(), 50, 3)   -- lav en ny basis-fisker
+		spiller:SetAttribute("Fisk", mineFisk - PRIS)
+		lavFisker("BasicFisher", naestePosition(), 50, 3)   -- ny fisker -- lander på plottet
 		buyFisher:FireClient(spiller, true, "Bought a Basic Fisher!")
 	else
 		buyFisher:FireClient(spiller, false, "Not enough fish")
 	end
 end)
 
-print("Fiskeri-tycoon klar: tre fiskere + shop.")
+print("Fiskeri-tycoon klar: plot 1 + central shop.")
