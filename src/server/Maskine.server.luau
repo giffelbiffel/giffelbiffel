@@ -10,6 +10,11 @@ local buyFisher = Instance.new("RemoteEvent")
 buyFisher.Name = "BuyFisher"
 buyFisher.Parent = ReplicatedStorage
 
+-- Walkie-talkie til at sende mit klik-sted (hvor fiskeren skal placeres)
+local placeFisher = Instance.new("RemoteEvent")
+placeFisher.Name = "PlaceFisher"
+placeFisher.Parent = ReplicatedStorage
+
 
 -- === PLOT 1 (min grund) ===
 -- Plottets centrum. Senere kan plot 2, 3, ... stå ved siden af i +X retning.
@@ -152,11 +157,26 @@ buyFisher.OnServerEvent:Connect(function(spiller)
 
 	if mineFisk >= PRIS then
 		spiller:SetAttribute("Fisk", mineFisk - PRIS)
-		lavFisker("BasicFisher", naestePosition(), 50, 3)   -- ny fisker -- lander på plottet
-		buyFisher:FireClient(spiller, true, "Bought a Basic Fisher!")
+		-- I stedet for at lave fiskeren nu, giver vi spilleren én "ventende" fisker,
+		-- som han selv placerer ved at klikke.
+		local ventende = (spiller:GetAttribute("PendingFishers") or 0) + 1
+		spiller:SetAttribute("PendingFishers", ventende)
+		buyFisher:FireClient(spiller, true, "Click on your plot to place the fisher")
 	else
 		buyFisher:FireClient(spiller, false, "Not enough fish")
 	end
 end)
 
-print("Fiskeri-tycoon klar: plot 1 + central shop.")
+-- === PLACERINGEN (sker på serveren) ===
+-- Client sender det sted, jeg klikkede. Serveren laver fiskeren dér.
+placeFisher.OnServerEvent:Connect(function(spiller, klikPosition)
+	local ventende = spiller:GetAttribute("PendingFishers") or 0
+	if ventende > 0 then
+		spiller:SetAttribute("PendingFishers", ventende - 1)   -- brug én ventende fisker
+		-- Løft 2 op, så fiskeren står OVEN på overfladen i stedet for at synke ned i den
+		local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
+		lavFisker("BasicFisher", placering, 50, 3)
+	end
+end)
+
+print("Fiskeri-tycoon klar: plot 1 + central shop + placering.")
