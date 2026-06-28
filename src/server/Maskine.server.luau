@@ -16,34 +16,55 @@ placeFisher.Name = "PlaceFisher"
 placeFisher.Parent = ReplicatedStorage
 
 
--- === PLOT 1 (min grund) ===
--- Plottets centrum. Senere kan plot 2, 3, ... stå ved siden af i +X retning.
+-- === OPSKRIFT: lav ét plot (kode-styret, så det er let at flytte til andre verdener) ===
+local function lavPlot(position)
+	local plot = Instance.new("Part")
+	plot.Name = "Plot"
+	plot.Size = Vector3.new(40, 1, 40)             -- stor, flad plade (40x40)
+	plot.Position = position
+	plot.Anchored = true
+	plot.Material = Enum.Material.Grass
+	plot.BrickColor = BrickColor.new("Bright green")
+	plot.Parent = workspace
+
+	-- Skilt over pladen (starter som "Empty plot")
+	local skilt = Instance.new("BillboardGui")
+	skilt.Name = "Skilt"
+	skilt.Size = UDim2.new(0, 200, 0, 50)
+	skilt.StudsOffset = Vector3.new(0, 6, 0)
+	skilt.AlwaysOnTop = true
+	skilt.Parent = plot
+
+	local navn = Instance.new("TextLabel")
+	navn.Name = "Navn"                             -- så vi kan finde den igen og ændre teksten
+	navn.Size = UDim2.new(1, 0, 1, 0)
+	navn.BackgroundTransparency = 1
+	navn.Font = Enum.Font.GothamBold
+	navn.TextScaled = true
+	navn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	navn.Text = "Empty plot"
+	navn.Parent = skilt
+
+	return plot
+end
+
+-- === Lav plot 1 ===
 local PLOT_POSITION = Vector3.new(0, 0.5, -60)
+local plot = lavPlot(PLOT_POSITION)
 
-local plot = Instance.new("Part")
-plot.Name = "Plot1"
-plot.Size = Vector3.new(40, 1, 40)             -- stor, flad plade (40x40)
-plot.Position = PLOT_POSITION
-plot.Anchored = true
-plot.Material = Enum.Material.Grass
-plot.BrickColor = BrickColor.new("Bright green")
-plot.Parent = workspace
+-- === Tildel plottet til en spiller (og sæt navnet på skiltet) ===
+local function tildelPlot(spiller)
+	plot:SetAttribute("Owner", spiller.UserId)            -- husk hvem der ejer plottet
+	plot.Skilt.Navn.Text = spiller.Name .. "'s plot"      -- fx "Oliver's plot"
+end
 
--- Skilt "PLOT 1" over pladen
-local plotSkilt = Instance.new("BillboardGui")
-plotSkilt.Size = UDim2.new(0, 200, 0, 50)
-plotSkilt.StudsOffset = Vector3.new(0, 6, 0)
-plotSkilt.AlwaysOnTop = true
-plotSkilt.Parent = plot
+-- Spillere der ALLEREDE er her (vigtigt i Studio Play Solo, hvor du selv joiner først)
+for _, spiller in Players:GetPlayers() do
+	tildelPlot(spiller)
+end
 
-local plotTekst = Instance.new("TextLabel")
-plotTekst.Size = UDim2.new(1, 0, 1, 0)
-plotTekst.BackgroundTransparency = 1
-plotTekst.Font = Enum.Font.GothamBold
-plotTekst.TextScaled = true
-plotTekst.TextColor3 = Color3.fromRGB(255, 255, 255)
-plotTekst.Text = "PLOT 1"
-plotTekst.Parent = plotSkilt
+-- Og alle der joiner herefter
+Players.PlayerAdded:Connect(tildelPlot)
 
 
 -- === Hvor skal næste fisker stå PÅ plottet? ===
