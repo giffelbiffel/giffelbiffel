@@ -67,11 +67,27 @@ for index, fisker in FisherConfig.fishers do
 	knap.Parent = vindue
 	Instance.new("UICorner").Parent = knap
 
-	-- Klik = bed serveren om at købe netop DENNE fisker (send dens nummer)
+	-- Klik = bed serveren om at købe netop DENNE fisker (send "fisher" + nummer)
 	knap.MouseButton1Click:Connect(function()
-		buyFisher:FireServer(index)
+		buyFisher:FireServer("fisher", index)
 	end)
 end
+
+-- === Købsknap til spanden (auto-collector) ===
+local spandKnap = Instance.new("TextButton")
+spandKnap.LayoutOrder = 500                     -- efter fiskerne, før besked/luk
+spandKnap.Size = UDim2.new(0, 300, 0, 44)
+spandKnap.BackgroundColor3 = Color3.fromRGB(230, 200, 60)   -- gul som spanden
+spandKnap.TextColor3 = Color3.fromRGB(40, 40, 40)
+spandKnap.Font = Enum.Font.GothamBold
+spandKnap.TextScaled = true
+spandKnap.Text = "Buy " .. FisherConfig.bucket.name .. " - " .. FisherConfig.bucket.price .. " coins"
+spandKnap.Parent = vindue
+Instance.new("UICorner").Parent = spandKnap
+
+spandKnap.MouseButton1Click:Connect(function()
+	buyFisher:FireServer("bucket")
+end)
 
 -- Besked-linje (fx "Not enough fish")
 local besked = Instance.new("TextLabel")

@@ -68,6 +68,10 @@ end
 Players.PlayerAdded:Connect(spillerJoinede)      -- og alle der joiner senere
 
 
+-- Plottets spand (auto-collector). Er nil indtil man placerer en spand.
+-- Fiskerne fylder DENNE spand, hvis den findes og har plads.
+local plotBucket = nil
+
 -- === OPSKRIFT: lav én fisker ud fra en config-blok ===
 local function lavFisker(def, position)
 	local fisker = Instance.new("Part")
@@ -121,14 +125,82 @@ local function lavFisker(def, position)
 	task.spawn(function()
 		while true do
 			task.wait(def.catchEvery)
-			local indhold = fisker:GetAttribute("Indhold")
-			if indhold < def.capacity then
-				local nyt = math.min(indhold + def.fishPerCatch, def.capacity)
-				fisker:SetAttribute("Indhold", nyt)
-				opdaterSkilt()
+			local fanget = def.fishPerCatch
+
+			-- Er der en spand på plottet med plads? Så flyder fisken derhen.
+			if plotBucket and plotBucket.Parent
+				and plotBucket:GetAttribute("Indhold") < FisherConfig.bucket.capacity then
+				local b = plotBucket:GetAttribute("Indhold")
+				plotBucket:SetAttribute("Indhold", math.min(b + fanget, FisherConfig.bucket.capacity))
+			else
+				-- Ingen spand (eller spanden er fuld) -> fiskeren beholder fisken selv
+				local indhold = fisker:GetAttribute("Indhold")
+				if indhold < def.capacity then
+					fisker:SetAttribute("Indhold", math.min(indhold + fanget, def.capacity))
+					opdaterSkilt()
+				end
 			end
 		end
 	end)
+end
+
+
+-- === OPSKRIFT: lav en spand (auto-collector) ===
+local function lavBucket(position)
+	local kapacitet = FisherConfig.bucket.capacity
+
+	local bucket = Instance.new("Part")
+	bucket.Name = "Bucket"
+	bucket.Size = Vector3.new(6, 6, 6)
+	bucket.Position = position
+	bucket.Anchored = true
+	bucket.BrickColor = BrickColor.new("Bright yellow")   -- gul, så den skiller sig ud
+	bucket.Parent = workspace
+	bucket:SetAttribute("Indhold", 0)
+
+	local skilt = Instance.new("BillboardGui")
+	skilt.Size = UDim2.new(0, 200, 0, 50)
+	skilt.StudsOffset = Vector3.new(0, 4, 0)
+	skilt.AlwaysOnTop = true
+	skilt.Parent = bucket
+
+	local tekst = Instance.new("TextLabel")
+	tekst.Size = UDim2.new(1, 0, 1, 0)
+	tekst.BackgroundTransparency = 1
+	tekst.Font = Enum.Font.GothamBold
+	tekst.TextScaled = true
+	tekst.Parent = skilt
+
+	local function opdaterSkilt()
+		local indhold = bucket:GetAttribute("Indhold")
+		if indhold >= kapacitet then
+			tekst.Text = "FULL"
+			tekst.TextColor3 = Color3.fromRGB(230, 50, 50)
+		else
+			tekst.Text = indhold .. " / " .. kapacitet
+			tekst.TextColor3 = Color3.fromRGB(60, 220, 90)
+		end
+	end
+	opdaterSkilt()
+
+	-- Skiltet opdaterer sig selv, hver gang spandens Indhold ændrer sig
+	-- (også når FISKERNE fylder den udefra).
+	bucket:GetAttributeChangedSignal("Indhold"):Connect(opdaterSkilt)
+
+	-- Tøm spanden ved berøring -> fisk til min beholdning
+	bucket.Touched:Connect(function(andetObjekt)
+		local spiller = Players:GetPlayerFromCharacter(andetObjekt.Parent)
+		if spiller then
+			local fisk = bucket:GetAttribute("Indhold")
+			if fisk > 0 then
+				bucket:SetAttribute("Indhold", 0)
+				spiller:SetAttribute("Fisk", (spiller:GetAttribute("Fisk") or 0) + fisk)
+			end
+		end
+	end)
+
+	-- Fra nu af fylder fiskerne DENNE spand
+	plotBucket = bucket
 end
 
 
@@ -195,15 +267,26 @@ end)
 
 
 -- === KØB (med COINS, sker på serveren) ===
-buyFisher.OnServerEvent:Connect(function(spiller, index)
-	local def = FisherConfig.fishers[index]
-	if not def then return end
+-- kind = "fisher" eller "bucket". index = hvilken fisker (kun for fiskere).
+buyFisher.OnServerEvent:Connect(function(spiller, kind, index)
+	-- Find prisen alt efter hvad jeg køber
+	local price
+	if kind == "fisher" then
+		local def = FisherConfig.fishers[index]
+		if not def then return end
+		price = def.price
+	elseif kind == "bucket" then
+		price = FisherConfig.bucket.price
+	else
+		return                                         -- ukendt -> ignorér
+	end
 
 	local coins = spiller:GetAttribute("Coins") or 0
-	if coins >= def.price then
-		spiller:SetAttribute("Coins", coins - def.price)
-		spiller:SetAttribute("PendingFisher", index)
-		buyFisher:FireClient(spiller, true, "Click on your plot to place the fisher")
+	if coins >= price then
+		spiller:SetAttribute("Coins", coins - price)
+		spiller:SetAttribute("PendingKind", kind)      -- husk HVAD jeg skal placere
+		spiller:SetAttribute("PendingIndex", index or 0)
+		buyFisher:FireClient(spiller, true, "Click on your plot to place it")
 	else
 		buyFisher:FireClient(spiller, false, "Not enough coins")
 	end
@@ -211,12 +294,19 @@ end)
 
 -- === PLACERING (sker på serveren) ===
 placeFisher.OnServerEvent:Connect(function(spiller, klikPosition)
-	local index = spiller:GetAttribute("PendingFisher") or 0
-	local def = FisherConfig.fishers[index]
-	if def then
-		spiller:SetAttribute("PendingFisher", 0)
-		local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
-		lavFisker(def, placering)
+	local kind = spiller:GetAttribute("PendingKind") or ""
+
+	if kind == "fisher" then
+		local def = FisherConfig.fishers[spiller:GetAttribute("PendingIndex")]
+		if def then
+			spiller:SetAttribute("PendingKind", "")
+			local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
+			lavFisker(def, placering)
+		end
+	elseif kind == "bucket" then
+		spiller:SetAttribute("PendingKind", "")
+		local placering = Vector3.new(klikPosition.X, klikPosition.Y + 3, klikPosition.Z)  -- spand er 6 høj
+		lavBucket(placering)
 	end
 end)
 

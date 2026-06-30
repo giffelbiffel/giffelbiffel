@@ -14,6 +14,13 @@
 return {
 	fishToCoins = 1,   -- 1 fisk = 1 coin (juster denne for at ændre hele økonomien)
 
+	-- Spanden (auto-collector): fiskerne sender deres fisk hertil.
+	bucket = {
+		name = "Bucket",
+		price = 300,        -- hvad spanden koster i COINS
+		capacity = 1000,    -- hvor mange fisk spanden kan rumme
+	},
+
 	fishers = {
 		{
 			name = "Basic Fisher",
