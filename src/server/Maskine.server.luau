@@ -57,7 +57,7 @@ local STARTKAPITAL = 50   -- coins man spawner med
 
 local function spillerJoinede(spiller)
 	spiller:SetAttribute("Coins", STARTKAPITAL)   -- nok til den billigste fisker
-	spiller:SetAttribute("Fisk", 0)               -- fisk fanget i alt (vises i HUD)
+	spiller:SetAttribute("Fisk", 0)               -- min fisk-beholdning (endnu ikke solgt)
 	plot:SetAttribute("Owner", spiller.UserId)
 	plot.Skilt.Navn.Text = spiller.Name .. "'s plot"
 end
@@ -104,7 +104,7 @@ local function lavFisker(def, position)
 	end
 	opdaterSkilt()
 
-	-- Tøm fiskeren ved berøring -- fiskene SÆLGES automatisk til coins
+	-- Tøm fiskeren ved berøring -- fiskene lægges til min FISK-beholdning (IKKE coins)
 	fisker.Touched:Connect(function(andetObjekt)
 		local spiller = Players:GetPlayerFromCharacter(andetObjekt.Parent)
 		if spiller then
@@ -112,10 +112,7 @@ local function lavFisker(def, position)
 			if fisk > 0 then
 				fisker:SetAttribute("Indhold", 0)
 				opdaterSkilt()
-
-				local tjente = fisk * FisherConfig.fishToCoins   -- sælg fisk -> coins
-				spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjente)
-				spiller:SetAttribute("Fisk", (spiller:GetAttribute("Fisk") or 0) + fisk)  -- stat
+				spiller:SetAttribute("Fisk", (spiller:GetAttribute("Fisk") or 0) + fisk)
 			end
 		end
 	end)
@@ -158,6 +155,43 @@ shopTekst.TextScaled = true
 shopTekst.TextColor3 = Color3.fromRGB(255, 255, 255)
 shopTekst.Text = "SHOP"
 shopTekst.Parent = shopSkilt
+
+
+-- === SELL-stedet (sælg alle mine fisk til coins ved berøring) ===
+local sell = Instance.new("Part")
+sell.Name = "SellPad"
+sell.Size = Vector3.new(4, 6, 4)
+sell.Position = Vector3.new(12, 3, 0)          -- centralt, ved siden af shoppen
+sell.Anchored = true
+sell.BrickColor = BrickColor.new("Medium stone grey")
+sell.Parent = workspace
+
+local sellSkilt = Instance.new("BillboardGui")
+sellSkilt.Size = UDim2.new(0, 200, 0, 50)
+sellSkilt.StudsOffset = Vector3.new(0, 4, 0)
+sellSkilt.AlwaysOnTop = true
+sellSkilt.Parent = sell
+
+local sellTekst = Instance.new("TextLabel")
+sellTekst.Size = UDim2.new(1, 0, 1, 0)
+sellTekst.BackgroundTransparency = 1
+sellTekst.Font = Enum.Font.GothamBold
+sellTekst.TextScaled = true
+sellTekst.TextColor3 = Color3.fromRGB(255, 255, 255)
+sellTekst.Text = "SELL"
+sellTekst.Parent = sellSkilt
+
+sell.Touched:Connect(function(andetObjekt)
+	local spiller = Players:GetPlayerFromCharacter(andetObjekt.Parent)
+	if spiller then
+		local fisk = spiller:GetAttribute("Fisk") or 0
+		if fisk > 0 then                                       -- har jeg fisk at sælge?
+			local tjente = fisk * FisherConfig.fishToCoins     -- fisk -> coins via kursen
+			spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjente)
+			spiller:SetAttribute("Fisk", 0)                    -- tøm fisk-beholdningen
+		end
+	end
+end)
 
 
 -- === KØB (med COINS, sker på serveren) ===
