@@ -55,7 +55,7 @@ titel.TextScaled = true
 titel.Parent = vindue
 
 -- === En købsknap PER fisker i config'en ===
-for index, fisker in FisherConfig do
+for index, fisker in FisherConfig.fishers do
 	local knap = Instance.new("TextButton")
 	knap.LayoutOrder = index
 	knap.Size = UDim2.new(0, 300, 0, 44)
@@ -63,7 +63,7 @@ for index, fisker in FisherConfig do
 	knap.TextColor3 = Color3.fromRGB(255, 255, 255)
 	knap.Font = Enum.Font.GothamBold
 	knap.TextScaled = true
-	knap.Text = "Buy " .. fisker.name .. " - " .. fisker.price .. " fish"
+	knap.Text = "Buy " .. fisker.name .. " - " .. fisker.price .. " coins"
 	knap.Parent = vindue
 	Instance.new("UICorner").Parent = knap
 

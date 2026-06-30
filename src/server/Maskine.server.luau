@@ -1,10 +1,10 @@
 -- Maskine.server.luau
--- Fiskeri-tycoon (server). Fiskernes værdier kommer nu fra FisherConfig.
+-- Fiskeri-tycoon (server). To-lags økonomi: fiskere fanger FISK, fisk sælges til COINS,
+-- fiskere købes med COINS. Værdier kommer fra FisherConfig.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Læs config-filen (delefilen med alle fiskernes værdier)
 local FisherConfig = require(ReplicatedStorage:WaitForChild("FisherConfig"))
 
 -- Walkie-talkier mellem client og server
@@ -52,24 +52,20 @@ end
 local PLOT_POSITION = Vector3.new(0, 0.5, -60)
 local plot = lavPlot(PLOT_POSITION)
 
--- === Tildel plottet til en spiller ===
-local function tildelPlot(spiller)
+-- === Klargør en spiller når han joiner: startkapital + tildel plot ===
+local STARTKAPITAL = 50   -- coins man spawner med
+
+local function spillerJoinede(spiller)
+	spiller:SetAttribute("Coins", STARTKAPITAL)   -- nok til den billigste fisker
+	spiller:SetAttribute("Fisk", 0)               -- fisk fanget i alt (vises i HUD)
 	plot:SetAttribute("Owner", spiller.UserId)
 	plot.Skilt.Navn.Text = spiller.Name .. "'s plot"
 end
-for _, spiller in Players:GetPlayers() do
-	tildelPlot(spiller)
-end
-Players.PlayerAdded:Connect(tildelPlot)
 
-
--- === Hvor skal næste fisker stå PÅ plottet? ===
-local fiskerNr = 0
-local function naestePosition()
-	local lokalX = -12 + fiskerNr * 8
-	fiskerNr = fiskerNr + 1
-	return Vector3.new(PLOT_POSITION.X + lokalX, 3, PLOT_POSITION.Z)
+for _, spiller in Players:GetPlayers() do        -- dem der allerede er her (Play Solo)
+	spillerJoinede(spiller)
 end
+Players.PlayerAdded:Connect(spillerJoinede)      -- og alle der joiner senere
 
 
 -- === OPSKRIFT: lav én fisker ud fra en config-blok ===
@@ -108,39 +104,34 @@ local function lavFisker(def, position)
 	end
 	opdaterSkilt()
 
-	-- Tøm ved berøring
+	-- Tøm fiskeren ved berøring -- fiskene SÆLGES automatisk til coins
 	fisker.Touched:Connect(function(andetObjekt)
 		local spiller = Players:GetPlayerFromCharacter(andetObjekt.Parent)
 		if spiller then
-			local fiskIFiskeren = fisker:GetAttribute("Indhold")
-			if fiskIFiskeren > 0 then
-				local mineFisk = (spiller:GetAttribute("Fisk") or 0) + fiskIFiskeren
-				spiller:SetAttribute("Fisk", mineFisk)
+			local fisk = fisker:GetAttribute("Indhold")
+			if fisk > 0 then
 				fisker:SetAttribute("Indhold", 0)
 				opdaterSkilt()
+
+				local tjente = fisk * FisherConfig.fishToCoins   -- sælg fisk -> coins
+				spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjente)
+				spiller:SetAttribute("Fisk", (spiller:GetAttribute("Fisk") or 0) + fisk)  -- stat
 			end
 		end
 	end)
 
-	-- Fang fisk over tid (egen tråd) -- bruger config-værdierne
+	-- Fang fisk over tid (egen tråd)
 	task.spawn(function()
 		while true do
 			task.wait(def.catchEvery)
 			local indhold = fisker:GetAttribute("Indhold")
 			if indhold < def.capacity then
-				-- læg fishPerCatch til, men aldrig over kapacitet
 				local nyt = math.min(indhold + def.fishPerCatch, def.capacity)
 				fisker:SetAttribute("Indhold", nyt)
 				opdaterSkilt()
 			end
 		end
 	end)
-end
-
-
--- === Start-fiskere: én af hver type i config'en ===
-for _, def in FisherConfig do
-	lavFisker(def, naestePosition())
 end
 
 
@@ -169,31 +160,30 @@ shopTekst.Text = "SHOP"
 shopTekst.Parent = shopSkilt
 
 
--- === KØB (sker på serveren) ===
--- Client sender hvilken fisker (et nummer = pladsen i config-listen).
+-- === KØB (med COINS, sker på serveren) ===
 buyFisher.OnServerEvent:Connect(function(spiller, index)
-	local def = FisherConfig[index]
-	if not def then return end                         -- ugyldigt nummer -- ignorér
+	local def = FisherConfig.fishers[index]
+	if not def then return end
 
-	local mineFisk = spiller:GetAttribute("Fisk") or 0
-	if mineFisk >= def.price then
-		spiller:SetAttribute("Fisk", mineFisk - def.price)
-		spiller:SetAttribute("PendingFisher", index)   -- husk hvilken type jeg skal placere
+	local coins = spiller:GetAttribute("Coins") or 0
+	if coins >= def.price then
+		spiller:SetAttribute("Coins", coins - def.price)
+		spiller:SetAttribute("PendingFisher", index)
 		buyFisher:FireClient(spiller, true, "Click on your plot to place the fisher")
 	else
-		buyFisher:FireClient(spiller, false, "Not enough fish")
+		buyFisher:FireClient(spiller, false, "Not enough coins")
 	end
 end)
 
 -- === PLACERING (sker på serveren) ===
 placeFisher.OnServerEvent:Connect(function(spiller, klikPosition)
 	local index = spiller:GetAttribute("PendingFisher") or 0
-	local def = FisherConfig[index]
+	local def = FisherConfig.fishers[index]
 	if def then
-		spiller:SetAttribute("PendingFisher", 0)        -- brugt op
+		spiller:SetAttribute("PendingFisher", 0)
 		local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
 		lavFisker(def, placering)
 	end
 end)
 
-print("Fiskeri-tycoon klar (config-styret).")
+print("Fiskeri-tycoon klar (coins-økonomi).")

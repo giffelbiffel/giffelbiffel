@@ -13,7 +13,7 @@ skaerm.Parent = spiller:WaitForChild("PlayerGui")  -- PlayerGui = min personlige
 
 -- 2. Lav en pæn boks i hjørnet
 local boks = Instance.new("TextLabel")
-boks.Size = UDim2.new(0, 220, 0, 60)           -- 220 bred, 60 høj (pixels)
+boks.Size = UDim2.new(0, 220, 0, 80)           -- 220 bred, 80 høj (plads til to linjer)
 boks.Position = UDim2.new(0, 20, 0, 20)        -- 20 fra venstre, 20 fra toppen
 boks.BackgroundColor3 = Color3.fromRGB(20, 30, 50)  -- mørkeblå baggrund
 boks.BackgroundTransparency = 0.3              -- en anelse gennemsigtig
@@ -27,13 +27,15 @@ local hjoerne = Instance.new("UICorner")
 hjoerne.CornerRadius = UDim.new(0, 12)
 hjoerne.Parent = boks
 
--- 3. Opskrift: skriv mine nuværende fisk i boksen
+-- 3. Opskrift: skriv mine coins og fisk i boksen (to linjer)
 local function opdaterHud()
-	local mineFisk = spiller:GetAttribute("Fisk") or 0   -- mine fisk (0 hvis ingen endnu)
-	boks.Text = "Fish: " .. mineFisk
+	local coins = spiller:GetAttribute("Coins") or 0   -- min valuta
+	local fisk = spiller:GetAttribute("Fisk") or 0     -- fisk fanget i alt
+	boks.Text = "Coins: " .. coins .. "\nFish: " .. fisk   -- \n = ny linje
 end
 
-opdaterHud()                                   -- Vis "Fisk: 0" med det samme
+opdaterHud()                                   -- Vis det med det samme
 
--- 4. Kør opskriften igen, hver gang mit "Fisk"-tal ændrer sig
+-- 4. Kør opskriften igen, hver gang Coins ELLER Fisk ændrer sig
+spiller:GetAttributeChangedSignal("Coins"):Connect(opdaterHud)
 spiller:GetAttributeChangedSignal("Fisk"):Connect(opdaterHud)
