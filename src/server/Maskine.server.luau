@@ -25,6 +25,11 @@ local sellAll = Instance.new("RemoteEvent")
 sellAll.Name = "SellAll"
 sellAll.Parent = ReplicatedStorage
 
+-- Walkie-talkie til rebirth (client beder om status / trykker rebirth; server svarer)
+local rebirthEvent = Instance.new("RemoteEvent")
+rebirthEvent.Name = "Rebirth"
+rebirthEvent.Parent = ReplicatedStorage
+
 
 -- === Sjældenheds-system: fiskene fra FishConfig, oddsene fra hver fisker ===
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
@@ -96,6 +101,17 @@ local function giveFisk(spiller, fiskListe)
 end
 
 
+-- === REBIRTH-data (i hukommelsen for nu) ===
+local RebirthConfig = require(ReplicatedStorage:WaitForChild("RebirthConfig"))
+
+-- Hvilke fisker-typer spilleren EJER (har købt) -> bruges til fisker-krav.
+local ownedFishers = {}   -- spiller -> { [fiskerNavn] = true }
+
+-- De ting spilleren har PLACERET på plottet (fiskere + spande), så rebirth kan rydde dem.
+-- Hver post: { part = Instance, robux = false }. robux=true undtages fra rydning (til senere).
+local placedItems = {}    -- spiller -> liste af { part, robux }
+
+
 -- === OPSKRIFT: lav ét plot ===
 local function lavPlot(position)
 	local plot = Instance.new("Part")
@@ -138,6 +154,10 @@ local function spillerJoinede(spiller)
 	spiller:SetAttribute("Coins", STARTKAPITAL)   -- nok til den billigste fisker
 	playerFish[spiller] = {}                       -- tom fisk-beholdning (individuelle fisk)
 	spiller:SetAttribute("Fisk", 0)               -- HUD-tal: antal fisk jeg har
+	spiller:SetAttribute("Rebirths", 0)           -- antal rebirths (HUD)
+	spiller:SetAttribute("Multiplier", 1)         -- salgsmultiplier (1 = ingen endnu)
+	ownedFishers[spiller] = {}                     -- endnu ejet ingen fiskere
+	placedItems[spiller] = {}                      -- endnu placeret intet
 	plot:SetAttribute("Owner", spiller.UserId)
 	plot.Skilt.Navn.Text = spiller.Name .. "'s plot"
 end
@@ -148,6 +168,8 @@ end
 Players.PlayerAdded:Connect(spillerJoinede)      -- og alle der joiner senere
 Players.PlayerRemoving:Connect(function(spiller)
 	playerFish[spiller] = nil                    -- ryd op når spilleren forlader
+	ownedFishers[spiller] = nil
+	placedItems[spiller] = nil
 end)
 
 
@@ -220,6 +242,7 @@ local function lavFisker(def, position)
 	task.spawn(function()
 		while true do
 			task.wait(def.catchEvery)
+			if not fisker.Parent then break end   -- fiskeren er fjernet (fx ved rebirth) -> stop
 
 			for _ = 1, def.fishPerCatch do
 				-- rul en fisk ud fra DENNE fiskers egen chance-tabel (eller standard)
@@ -242,6 +265,8 @@ local function lavFisker(def, position)
 			end
 		end
 	end)
+
+	return fisker
 end
 
 
@@ -303,6 +328,8 @@ local function lavBucket(position)
 	bucketCount += 1
 	bucket:SetAttribute("Order", bucketCount)   -- spanden husker sin rækkefølge
 	table.insert(plotBuckets, { part = bucket, list = bucketList, capacity = kapacitet, order = bucketCount })
+
+	return bucket
 end
 
 
@@ -379,6 +406,15 @@ buyFisher.OnServerEvent:Connect(function(spiller, kind, index)
 		spiller:SetAttribute("Coins", coins - price)
 		spiller:SetAttribute("PendingKind", kind)      -- husk HVAD jeg skal placere
 		spiller:SetAttribute("PendingIndex", index or 0)
+
+		-- REBIRTH: husk at spilleren EJER denne fisker-type (uanset placering)
+		if kind == "fisher" then
+			local koebtDef = FisherConfig.fishers[index]
+			if koebtDef and ownedFishers[spiller] then
+				ownedFishers[spiller][koebtDef.name] = true
+			end
+		end
+
 		buyFisher:FireClient(spiller, true, "Click on your plot to place it")
 	else
 		buyFisher:FireClient(spiller, false, "Not enough coins")
@@ -394,12 +430,19 @@ placeFisher.OnServerEvent:Connect(function(spiller, klikPosition)
 		if def then
 			spiller:SetAttribute("PendingKind", "")
 			local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
-			lavFisker(def, placering)
+			local part = lavFisker(def, placering)
+			-- REBIRTH: husk denne placering (robux=false -> ryddes ved rebirth)
+			if placedItems[spiller] then
+				table.insert(placedItems[spiller], { part = part, robux = false })
+			end
 		end
 	elseif kind == "bucket" then
 		spiller:SetAttribute("PendingKind", "")
 		local placering = Vector3.new(klikPosition.X, klikPosition.Y + 3, klikPosition.Z)  -- spand er 6 høj
-		lavBucket(placering)
+		local part = lavBucket(placering)
+		if placedItems[spiller] then
+			table.insert(placedItems[spiller], { part = part, robux = false })
+		end
 	end
 end)
 
@@ -434,11 +477,113 @@ sellAll.OnServerEvent:Connect(function(spiller)
 		total += def.value
 	end
 	if total > 0 then
-		spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + total)
+		local mult = spiller:GetAttribute("Multiplier") or 1   -- rebirth-multiplier
+		local tjent = math.floor(total * mult)                 -- gang oveni -- rør ikke grundværdien
+		spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjent)
 	end
 	playerFish[spiller] = {}                              -- beholdningen er tom nu
 	opdaterFiskAntal(spiller)
 	openSell:FireClient(spiller, lavSummary(spiller))    -- opdater menuen (nu tom)
 end)
 
-print("Fiskeri-tycoon klar (sjældenhed + sælg-menu).")
+-- === REBIRTH ===
+
+-- Rebirth-stedet (grå placeholder-kasse ved plottet)
+local rebirthPad = Instance.new("Part")
+rebirthPad.Name = "RebirthPad"
+rebirthPad.Size = Vector3.new(4, 6, 4)
+rebirthPad.Position = Vector3.new(-26, 3, -60)   -- ved kanten af plottet
+rebirthPad.Anchored = true
+rebirthPad.BrickColor = BrickColor.new("Medium stone grey")
+rebirthPad.Parent = workspace
+
+local rebirthSkilt = Instance.new("BillboardGui")
+rebirthSkilt.Size = UDim2.new(0, 200, 0, 50)
+rebirthSkilt.StudsOffset = Vector3.new(0, 4, 0)
+rebirthSkilt.AlwaysOnTop = true
+rebirthSkilt.Parent = rebirthPad
+
+local rebirthTekst = Instance.new("TextLabel")
+rebirthTekst.Size = UDim2.new(1, 0, 1, 0)
+rebirthTekst.BackgroundTransparency = 1
+rebirthTekst.Font = Enum.Font.GothamBold
+rebirthTekst.TextScaled = true
+rebirthTekst.TextColor3 = Color3.fromRGB(255, 255, 255)
+rebirthTekst.Text = "REBIRTH"
+rebirthTekst.Parent = rebirthSkilt
+
+-- Hvilket niveau er det NÆSTE for denne spiller? (nil = max nået)
+local function naesteNiveau(spiller)
+	local rebirths = spiller:GetAttribute("Rebirths") or 0
+	return RebirthConfig[rebirths + 1]
+end
+
+-- Ejer spilleren alle de krævede fiskere til dette niveau?
+local function ejerAlleFiskere(spiller, niveau)
+	local ejet = ownedFishers[spiller] or {}
+	for _, navn in niveau.requiredFishers do
+		if not ejet[navn] then
+			return false
+		end
+	end
+	return true
+end
+
+-- Lav og send status til klienten (til menuen + HUD)
+local function sendRebirthStatus(spiller)
+	local niveau = naesteNiveau(spiller)
+	local status
+	if not niveau then
+		status = {
+			isMax = true,
+			rebirths = spiller:GetAttribute("Rebirths") or 0,
+			currentMultiplier = spiller:GetAttribute("Multiplier") or 1,
+		}
+	else
+		status = {
+			isMax = false,
+			levelNumber = (spiller:GetAttribute("Rebirths") or 0) + 1,
+			requiredCoins = niveau.requiredCoins,
+			requiredFishers = niveau.requiredFishers,
+			ownsAllFishers = ejerAlleFiskere(spiller, niveau),
+			nextMultiplier = niveau.multiplier,               -- multiplieren man FÅR
+			rebirths = spiller:GetAttribute("Rebirths") or 0,
+			currentMultiplier = spiller:GetAttribute("Multiplier") or 1,
+		}
+	end
+	rebirthEvent:FireClient(spiller, status)
+end
+
+-- Ryd plottet: fjern alle placerede fiskere/spande UNDTAGEN robux-købte
+local function ryddPlot(spiller)
+	local beholdt = {}
+	for _, post in placedItems[spiller] or {} do
+		if post.robux then
+			table.insert(beholdt, post)             -- robux-ting overlever rebirth (til senere)
+		elseif post.part then
+			post.part:Destroy()                     -- fjern fra plottet
+		end
+	end
+	placedItems[spiller] = beholdt
+end
+
+-- Client sender "do" (udfør rebirth) eller andet (bare giv mig status)
+rebirthEvent.OnServerEvent:Connect(function(spiller, handling)
+	if handling == "do" then
+		local niveau = naesteNiveau(spiller)
+		if niveau then
+			local coins = spiller:GetAttribute("Coins") or 0
+			-- Serveren tjekker ALTID kravene selv (kan ikke snydes fra client)
+			if coins >= niveau.requiredCoins and ejerAlleFiskere(spiller, niveau) then
+				spiller:SetAttribute("Coins", 0)                       -- nulstil coins
+				ryddPlot(spiller)                                      -- ryd plottet (ikke robux)
+				ownedFishers[spiller] = {}                             -- ejerskab nulstilles
+				spiller:SetAttribute("Rebirths", (spiller:GetAttribute("Rebirths") or 0) + 1)
+				spiller:SetAttribute("Multiplier", niveau.multiplier)  -- ny TOTAL multiplier
+			end
+		end
+	end
+	sendRebirthStatus(spiller)   -- send altid opdateret status tilbage
+end)
+
+print("Fiskeri-tycoon klar (sjældenhed + sælg-menu + rebirth).")
