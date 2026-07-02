@@ -30,7 +30,7 @@ sellAll.Parent = ReplicatedStorage
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
 
 -- Bruges hvis en fisker i config'en IKKE har sin egen chances-tabel (så intet crasher)
-local DEFAULT_CHANCES = { Common = 70, Rare = 20, Epic = 8, Legendary = 2 }
+local DEFAULT_CHANCES = { Basic = 70, Rare = 20, Epic = 8, Legendary = 2 }
 
 -- Rul en sjældenhed ud fra en GIVEN chance-tabel (fx fiskerens egen)
 local function rollRarity(chances)
@@ -39,7 +39,7 @@ local function rollRarity(chances)
 		total += chance
 	end
 	if total <= 0 then
-		return "Common"                      -- sikkerhed hvis tabellen er tom/ugyldig
+		return "Basic"                      -- sikkerhed hvis tabellen er tom/ugyldig
 	end
 	local r = math.random() * total          -- et tilfældigt tal mellem 0 og total
 	local cumulative = 0
@@ -49,7 +49,7 @@ local function rollRarity(chances)
 			return rarity
 		end
 	end
-	return "Common"
+	return "Basic"
 end
 
 -- Rul en hel fisk: først sjældenhed (fra fiskerens tabel), så en tilfældig fisk
@@ -151,9 +151,21 @@ Players.PlayerRemoving:Connect(function(spiller)
 end)
 
 
--- Plottets spand (auto-collector). Er nil indtil man placerer en spand.
--- Fiskerne fylder DENNE spand, hvis den findes og har plads.
-local plotBucket = nil
+-- Plottets spande (auto-collector), i den rækkefølge de blev placeret.
+-- Spand 1 er først, spand 2 er næste, osv.
+local plotBuckets = {}
+local bucketCount = 0   -- tæller, så hver spand får et placerings-nummer
+
+-- Find den FØRSTE spand (laveste placerings-nummer) der har plads.
+-- Fordi listen er i placerings-rækkefølge, fyldes spand 1 før spand 2 osv.
+local function foersteLedigeSpand()
+	for _, b in plotBuckets do
+		if b.part.Parent and #b.list < b.capacity then
+			return b
+		end
+	end
+	return nil
+end
 
 -- === OPSKRIFT: lav én fisker ud fra en config-blok ===
 local function lavFisker(def, position)
@@ -214,17 +226,18 @@ local function lavFisker(def, position)
 				local fisk = rollFish(def.chances or DEFAULT_CHANCES)
 
 				if fisk then
-					if plotBucket and plotBucket.part.Parent and #plotBucket.list < plotBucket.capacity then
+					local spand = foersteLedigeSpand()   -- laveste ikke-fulde spand
+					if spand then
 						-- der er en spand med plads -> fisken flyder derhen
-						table.insert(plotBucket.list, fisk)
-						plotBucket.part:SetAttribute("Indhold", #plotBucket.list)
+						table.insert(spand.list, fisk)
+						spand.part:SetAttribute("Indhold", #spand.list)
 					elseif #fisherList < def.capacity then
-						-- ellers beholder fiskeren fisken selv (hvis der er plads)
+						-- FØRST når ALLE spande er fulde: fiskeren beholder fisken selv
 						table.insert(fisherList, fisk)
 						fisker:SetAttribute("Indhold", #fisherList)
 						opdaterSkilt()
 					end
-					-- er både spand og fisker fulde: der fanges ikke mere (som før)
+					-- er alle spande OG fiskeren fulde: der fanges ikke mere (som før)
 				end
 			end
 		end
@@ -286,8 +299,10 @@ local function lavBucket(position)
 		end
 	end)
 
-	-- Fra nu af fylder fiskerne DENNE spand (lille objekt: del + liste + kapacitet)
-	plotBucket = { part = bucket, list = bucketList, capacity = kapacitet }
+	-- Registrér spanden bagerst i listen -> den får det næste placerings-nummer
+	bucketCount += 1
+	bucket:SetAttribute("Order", bucketCount)   -- spanden husker sin rækkefølge
+	table.insert(plotBuckets, { part = bucket, list = bucketList, capacity = kapacitet, order = bucketCount })
 end
 
 
