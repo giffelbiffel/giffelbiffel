@@ -7,11 +7,11 @@
 
 return {
 	-- Rækkefølge sjældenheder vises i sælg-menuen (øverst først).
-	rarityOrder = { "Common", "Rare", "Epic", "Legendary" },
+	rarityOrder = { "Basic", "Rare", "Epic", "Legendary" },
 
 	-- Farve pr. sjældenhed (bruges i sælg-menuen).
 	colors = {
-		Common = Color3.fromRGB(200, 200, 200),      -- grå
+		Basic = Color3.fromRGB(200, 200, 200),      -- grå
 		Rare = Color3.fromRGB(80, 140, 255),         -- blå
 		Epic = Color3.fromRGB(180, 90, 240),         -- lilla
 		Legendary = Color3.fromRGB(255, 200, 60),    -- guld
@@ -22,7 +22,7 @@ return {
 	--   value = hvor mange coins fisken giver, når den sælges
 	-- Tilføj/fjern frit -- antallet i hver gruppe er bare hvor mange du skriver.
 	fish = {
-		Common = {
+		Basic = {
 			{ name = "Anchovy",  value = 1 },
 			{ name = "Mackerel", value = 2 },
 			{ name = "Cod",      value = 3 },
