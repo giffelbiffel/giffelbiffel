@@ -1,16 +1,11 @@
 -- FishConfig.luau  (en ModuleScript -- en "delefil")
--- HER bor fisketyperne og sjældenheds-oddsene. Ret frit for at ændre spillet.
+-- HER bor selve fiskene, grupperet efter sjældenhed. Ret frit.
+--
+-- Sjældenheds-ODDSENE bor IKKE her -- de bor på hver fisker i FisherConfig.luau,
+-- så forskellige fiskere kan have forskellige chancer. Her bestemmer du kun
+-- HVILKE fisk der findes i hver sjældenhed, og hvad de er værd.
 
 return {
-	-- Chance for hver sjældenhed. Behøver ikke summe til 100 --
-	-- vi regner selv forholdet ud, så du kan skrive hvilke tal du vil.
-	chances = {
-		Common = 70,
-		Rare = 20,
-		Epic = 8,
-		Legendary = 2,
-	},
-
 	-- Rækkefølge sjældenheder vises i sælg-menuen (øverst først).
 	rarityOrder = { "Common", "Rare", "Epic", "Legendary" },
 
@@ -22,18 +17,26 @@ return {
 		Legendary = Color3.fromRGB(255, 200, 60),    -- guld
 	},
 
-	-- Fisketyper.
-	--   name   = navnet (vises i menuen) -- SKRIV PÅ ENGELSK
-	--   rarity = sjældenhed (skal matche en af dem i "chances" ovenfor)
-	--   value  = hvor mange coins fisken giver, når den sælges
+	-- Alle fisk, samlet under deres sjældenhed.
+	--   name  = navnet (vises i menuen) -- SKRIV PÅ ENGELSK
+	--   value = hvor mange coins fisken giver, når den sælges
+	-- Tilføj/fjern frit -- antallet i hver gruppe er bare hvor mange du skriver.
 	fish = {
-		{ name = "Anchovy",    rarity = "Common",    value = 1 },
-		{ name = "Mackerel",   rarity = "Common",    value = 2 },
-		{ name = "Cod",        rarity = "Common",    value = 3 },
-		{ name = "Salmon",     rarity = "Rare",      value = 6 },
-		{ name = "Tuna",       rarity = "Rare",      value = 10 },
-		{ name = "Swordfish",  rarity = "Epic",      value = 25 },
-		{ name = "Manta Ray",  rarity = "Epic",      value = 35 },
-		{ name = "Golden Koi", rarity = "Legendary", value = 120 },
+		Common = {
+			{ name = "Anchovy",  value = 1 },
+			{ name = "Mackerel", value = 2 },
+			{ name = "Cod",      value = 3 },
+		},
+		Rare = {
+			{ name = "Salmon", value = 6 },
+			{ name = "Tuna",   value = 10 },
+		},
+		Epic = {
+			{ name = "Swordfish", value = 25 },
+			{ name = "Manta Ray", value = 35 },
+		},
+		Legendary = {
+			{ name = "Golden Koi", value = 120 },
+		},
 	},
 }

@@ -26,41 +26,55 @@ sellAll.Name = "SellAll"
 sellAll.Parent = ReplicatedStorage
 
 
--- === Sjældenheds-system: fisketyper og chancer fra FishConfig ===
+-- === Sjældenheds-system: fiskene fra FishConfig, oddsene fra hver fisker ===
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
 
--- Sortér fisketyper efter sjældenhed, så vi hurtigt kan vælge en tilfældig af en type
-local fishByRarity = {}
-for _, def in FishConfig.fish do
-	fishByRarity[def.rarity] = fishByRarity[def.rarity] or {}
-	table.insert(fishByRarity[def.rarity], def)
-end
+-- Bruges hvis en fisker i config'en IKKE har sin egen chances-tabel (så intet crasher)
+local DEFAULT_CHANCES = { Common = 70, Rare = 20, Epic = 8, Legendary = 2 }
 
--- Rul en sjældenhed ud fra chance-tabellen (fx Common 70, Rare 20, ...)
-local function rollRarity()
+-- Rul en sjældenhed ud fra en GIVEN chance-tabel (fx fiskerens egen)
+local function rollRarity(chances)
 	local total = 0
-	for _, chance in FishConfig.chances do
+	for _, chance in chances do
 		total += chance
+	end
+	if total <= 0 then
+		return "Common"                      -- sikkerhed hvis tabellen er tom/ugyldig
 	end
 	local r = math.random() * total          -- et tilfældigt tal mellem 0 og total
 	local cumulative = 0
-	for rarity, chance in FishConfig.chances do
+	for rarity, chance in chances do
 		cumulative += chance
 		if r <= cumulative then
 			return rarity
 		end
 	end
-	return "Common"                          -- sikkerhed
+	return "Common"
 end
 
--- Rul en hel fisk: først sjældenhed, så en tilfældig fisketype af den sjældenhed
-local function rollFish()
-	local rarity = rollRarity()
-	local liste = fishByRarity[rarity]
+-- Rul en hel fisk: først sjældenhed (fra fiskerens tabel), så en tilfældig fisk
+-- af den sjældenhed fra FishConfig. Returnerer {name, value, rarity} eller nil.
+local function rollFish(chances)
+	local rarity = rollRarity(chances)
+	local liste = FishConfig.fish[rarity]
+
+	-- Hvis den valgte sjældenhed ikke har nogen fisk defineret: find en der har
 	if not liste or #liste == 0 then
-		return FishConfig.fish[math.random(#FishConfig.fish)]   -- hvis en sjældenhed er tom
+		for _, r in FishConfig.rarityOrder do
+			local kandidat = FishConfig.fish[r]
+			if kandidat and #kandidat > 0 then
+				rarity = r
+				liste = kandidat
+				break
+			end
+		end
 	end
-	return liste[math.random(#liste)]
+	if not liste or #liste == 0 then
+		return nil                           -- der findes slet ingen fisk i config'en
+	end
+
+	local f = liste[math.random(#liste)]
+	return { name = f.name, value = f.value, rarity = rarity }
 end
 
 
@@ -196,19 +210,22 @@ local function lavFisker(def, position)
 			task.wait(def.catchEvery)
 
 			for _ = 1, def.fishPerCatch do
-				local fisk = rollFish()            -- rul type + sjældenhed
+				-- rul en fisk ud fra DENNE fiskers egen chance-tabel (eller standard)
+				local fisk = rollFish(def.chances or DEFAULT_CHANCES)
 
-				if plotBucket and plotBucket.part.Parent and #plotBucket.list < plotBucket.capacity then
-					-- der er en spand med plads -> fisken flyder derhen
-					table.insert(plotBucket.list, fisk)
-					plotBucket.part:SetAttribute("Indhold", #plotBucket.list)
-				elseif #fisherList < def.capacity then
-					-- ellers beholder fiskeren fisken selv (hvis der er plads)
-					table.insert(fisherList, fisk)
-					fisker:SetAttribute("Indhold", #fisherList)
-					opdaterSkilt()
+				if fisk then
+					if plotBucket and plotBucket.part.Parent and #plotBucket.list < plotBucket.capacity then
+						-- der er en spand med plads -> fisken flyder derhen
+						table.insert(plotBucket.list, fisk)
+						plotBucket.part:SetAttribute("Indhold", #plotBucket.list)
+					elseif #fisherList < def.capacity then
+						-- ellers beholder fiskeren fisken selv (hvis der er plads)
+						table.insert(fisherList, fisk)
+						fisker:SetAttribute("Indhold", #fisherList)
+						opdaterSkilt()
+					end
+					-- er både spand og fisker fulde: der fanges ikke mere (som før)
 				end
-				-- er både spand og fisker fulde: der fanges ikke mere (som før)
 			end
 		end
 	end)
