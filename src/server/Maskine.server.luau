@@ -16,6 +16,71 @@ local placeFisher = Instance.new("RemoteEvent")
 placeFisher.Name = "PlaceFisher"
 placeFisher.Parent = ReplicatedStorage
 
+-- Walkie-talkier til sælg-menuen
+local openSell = Instance.new("RemoteEvent")
+openSell.Name = "OpenSellMenu"
+openSell.Parent = ReplicatedStorage
+
+local sellAll = Instance.new("RemoteEvent")
+sellAll.Name = "SellAll"
+sellAll.Parent = ReplicatedStorage
+
+
+-- === Sjældenheds-system: fisketyper og chancer fra FishConfig ===
+local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
+
+-- Sortér fisketyper efter sjældenhed, så vi hurtigt kan vælge en tilfældig af en type
+local fishByRarity = {}
+for _, def in FishConfig.fish do
+	fishByRarity[def.rarity] = fishByRarity[def.rarity] or {}
+	table.insert(fishByRarity[def.rarity], def)
+end
+
+-- Rul en sjældenhed ud fra chance-tabellen (fx Common 70, Rare 20, ...)
+local function rollRarity()
+	local total = 0
+	for _, chance in FishConfig.chances do
+		total += chance
+	end
+	local r = math.random() * total          -- et tilfældigt tal mellem 0 og total
+	local cumulative = 0
+	for rarity, chance in FishConfig.chances do
+		cumulative += chance
+		if r <= cumulative then
+			return rarity
+		end
+	end
+	return "Common"                          -- sikkerhed
+end
+
+-- Rul en hel fisk: først sjældenhed, så en tilfældig fisketype af den sjældenhed
+local function rollFish()
+	local rarity = rollRarity()
+	local liste = fishByRarity[rarity]
+	if not liste or #liste == 0 then
+		return FishConfig.fish[math.random(#FishConfig.fish)]   -- hvis en sjældenhed er tom
+	end
+	return liste[math.random(#liste)]
+end
+
+
+-- === Spillerens fangede fisk (individuelle fisk, ikke bare ét tal) ===
+local playerFish = {}   -- spiller -> liste af fisk (hver er en FishConfig-blok: name/rarity/value)
+
+local function opdaterFiskAntal(spiller)
+	spiller:SetAttribute("Fisk", #(playerFish[spiller] or {}))   -- HUD viser antallet
+end
+
+-- Læg en liste af fisk over i spillerens beholdning
+local function giveFisk(spiller, fiskListe)
+	local mine = playerFish[spiller]
+	if not mine then return end
+	for _, fiskDef in fiskListe do
+		table.insert(mine, fiskDef)
+	end
+	opdaterFiskAntal(spiller)
+end
+
 
 -- === OPSKRIFT: lav ét plot ===
 local function lavPlot(position)
@@ -57,7 +122,8 @@ local STARTKAPITAL = 50   -- coins man spawner med
 
 local function spillerJoinede(spiller)
 	spiller:SetAttribute("Coins", STARTKAPITAL)   -- nok til den billigste fisker
-	spiller:SetAttribute("Fisk", 0)               -- min fisk-beholdning (endnu ikke solgt)
+	playerFish[spiller] = {}                       -- tom fisk-beholdning (individuelle fisk)
+	spiller:SetAttribute("Fisk", 0)               -- HUD-tal: antal fisk jeg har
 	plot:SetAttribute("Owner", spiller.UserId)
 	plot.Skilt.Navn.Text = spiller.Name .. "'s plot"
 end
@@ -66,6 +132,9 @@ for _, spiller in Players:GetPlayers() do        -- dem der allerede er her (Pla
 	spillerJoinede(spiller)
 end
 Players.PlayerAdded:Connect(spillerJoinede)      -- og alle der joiner senere
+Players.PlayerRemoving:Connect(function(spiller)
+	playerFish[spiller] = nil                    -- ryd op når spilleren forlader
+end)
 
 
 -- Plottets spand (auto-collector). Er nil indtil man placerer en spand.
@@ -82,6 +151,8 @@ local function lavFisker(def, position)
 	fisker.BrickColor = BrickColor.new("Medium stone grey")
 	fisker.Parent = workspace
 	fisker:SetAttribute("Indhold", 0)
+
+	local fisherList = {}   -- de individuelle fisk denne fisker holder lige nu
 
 	local skilt = Instance.new("BillboardGui")
 	skilt.Size = UDim2.new(0, 200, 0, 50)
@@ -108,16 +179,14 @@ local function lavFisker(def, position)
 	end
 	opdaterSkilt()
 
-	-- Tøm fiskeren ved berøring -- fiskene lægges til min FISK-beholdning (IKKE coins)
+	-- Tøm fiskeren ved berøring -- de individuelle fisk lægges til min beholdning
 	fisker.Touched:Connect(function(andetObjekt)
 		local spiller = Players:GetPlayerFromCharacter(andetObjekt.Parent)
-		if spiller then
-			local fisk = fisker:GetAttribute("Indhold")
-			if fisk > 0 then
-				fisker:SetAttribute("Indhold", 0)
-				opdaterSkilt()
-				spiller:SetAttribute("Fisk", (spiller:GetAttribute("Fisk") or 0) + fisk)
-			end
+		if spiller and #fisherList > 0 then
+			giveFisk(spiller, fisherList)          -- flyt fiskene til spilleren
+			table.clear(fisherList)
+			fisker:SetAttribute("Indhold", 0)      -- tallet på skiltet
+			opdaterSkilt()
 		end
 	end)
 
@@ -125,20 +194,21 @@ local function lavFisker(def, position)
 	task.spawn(function()
 		while true do
 			task.wait(def.catchEvery)
-			local fanget = def.fishPerCatch
 
-			-- Er der en spand på plottet med plads? Så flyder fisken derhen.
-			if plotBucket and plotBucket.Parent
-				and plotBucket:GetAttribute("Indhold") < FisherConfig.bucket.capacity then
-				local b = plotBucket:GetAttribute("Indhold")
-				plotBucket:SetAttribute("Indhold", math.min(b + fanget, FisherConfig.bucket.capacity))
-			else
-				-- Ingen spand (eller spanden er fuld) -> fiskeren beholder fisken selv
-				local indhold = fisker:GetAttribute("Indhold")
-				if indhold < def.capacity then
-					fisker:SetAttribute("Indhold", math.min(indhold + fanget, def.capacity))
+			for _ = 1, def.fishPerCatch do
+				local fisk = rollFish()            -- rul type + sjældenhed
+
+				if plotBucket and plotBucket.part.Parent and #plotBucket.list < plotBucket.capacity then
+					-- der er en spand med plads -> fisken flyder derhen
+					table.insert(plotBucket.list, fisk)
+					plotBucket.part:SetAttribute("Indhold", #plotBucket.list)
+				elseif #fisherList < def.capacity then
+					-- ellers beholder fiskeren fisken selv (hvis der er plads)
+					table.insert(fisherList, fisk)
+					fisker:SetAttribute("Indhold", #fisherList)
 					opdaterSkilt()
 				end
+				-- er både spand og fisker fulde: der fanges ikke mere (som før)
 			end
 		end
 	end)
@@ -157,6 +227,8 @@ local function lavBucket(position)
 	bucket.BrickColor = BrickColor.new("Bright yellow")   -- gul, så den skiller sig ud
 	bucket.Parent = workspace
 	bucket:SetAttribute("Indhold", 0)
+
+	local bucketList = {}   -- de individuelle fisk i spanden
 
 	local skilt = Instance.new("BillboardGui")
 	skilt.Size = UDim2.new(0, 200, 0, 50)
@@ -187,20 +259,18 @@ local function lavBucket(position)
 	-- (også når FISKERNE fylder den udefra).
 	bucket:GetAttributeChangedSignal("Indhold"):Connect(opdaterSkilt)
 
-	-- Tøm spanden ved berøring -> fisk til min beholdning
+	-- Tøm spanden ved berøring -> de individuelle fisk til min beholdning
 	bucket.Touched:Connect(function(andetObjekt)
 		local spiller = Players:GetPlayerFromCharacter(andetObjekt.Parent)
-		if spiller then
-			local fisk = bucket:GetAttribute("Indhold")
-			if fisk > 0 then
-				bucket:SetAttribute("Indhold", 0)
-				spiller:SetAttribute("Fisk", (spiller:GetAttribute("Fisk") or 0) + fisk)
-			end
+		if spiller and #bucketList > 0 then
+			giveFisk(spiller, bucketList)
+			table.clear(bucketList)
+			bucket:SetAttribute("Indhold", 0)   -- skiltet opdaterer sig selv via changed-signal
 		end
 	end)
 
-	-- Fra nu af fylder fiskerne DENNE spand
-	plotBucket = bucket
+	-- Fra nu af fylder fiskerne DENNE spand (lille objekt: del + liste + kapacitet)
+	plotBucket = { part = bucket, list = bucketList, capacity = kapacitet }
 end
 
 
@@ -253,17 +323,8 @@ sellTekst.TextColor3 = Color3.fromRGB(255, 255, 255)
 sellTekst.Text = "SELL"
 sellTekst.Parent = sellSkilt
 
-sell.Touched:Connect(function(andetObjekt)
-	local spiller = Players:GetPlayerFromCharacter(andetObjekt.Parent)
-	if spiller then
-		local fisk = spiller:GetAttribute("Fisk") or 0
-		if fisk > 0 then                                       -- har jeg fisk at sælge?
-			local tjente = fisk * FisherConfig.fishToCoins     -- fisk -> coins via kursen
-			spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjente)
-			spiller:SetAttribute("Fisk", 0)                    -- tøm fisk-beholdningen
-		end
-	end
-end)
+-- (SELL-stedet åbner nu en sælg-menu på client i stedet for at sælge med det samme.
+--  Selve salget sker via "Sell All"-knappen i menuen -- se sælg-menu-håndteringen nederst.)
 
 
 -- === KØB (med COINS, sker på serveren) ===
@@ -310,4 +371,42 @@ placeFisher.OnServerEvent:Connect(function(spiller, klikPosition)
 	end
 end)
 
-print("Fiskeri-tycoon klar (coins-økonomi).")
+-- === SÆLG-MENU (server-siden) ===
+-- Lav en oversigt over spillerens fisk, grupperet efter type
+local function lavSummary(spiller)
+	local fiskListe = playerFish[spiller] or {}
+	local grupper = {}       -- navn -> {name, rarity, value, count}
+	local raekkefoelge = {}  -- selve listen vi sender til client
+	for _, def in fiskListe do
+		local g = grupper[def.name]
+		if not g then
+			g = { name = def.name, rarity = def.rarity, value = def.value, count = 0 }
+			grupper[def.name] = g
+			table.insert(raekkefoelge, g)
+		end
+		g.count += 1
+	end
+	return raekkefoelge
+end
+
+-- Client beder om at åbne menuen -> vi sender oversigten tilbage
+openSell.OnServerEvent:Connect(function(spiller)
+	openSell:FireClient(spiller, lavSummary(spiller))
+end)
+
+-- Client trykker "Sell All" -> sælg alt ud fra hver fisks værdi i FishConfig
+sellAll.OnServerEvent:Connect(function(spiller)
+	local fiskListe = playerFish[spiller] or {}
+	local total = 0
+	for _, def in fiskListe do
+		total += def.value
+	end
+	if total > 0 then
+		spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + total)
+	end
+	playerFish[spiller] = {}                              -- beholdningen er tom nu
+	opdaterFiskAntal(spiller)
+	openSell:FireClient(spiller, lavSummary(spiller))    -- opdater menuen (nu tom)
+end)
+
+print("Fiskeri-tycoon klar (sjældenhed + sælg-menu).")
