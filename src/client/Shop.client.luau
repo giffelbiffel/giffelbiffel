@@ -140,23 +140,60 @@ lukKnap.MouseButton1Click:Connect(function()
 end)
 
 -- Serverens svar på et køb
-buyFisher.OnClientEvent:Connect(function(lykkedes, tekst)
+buyFisher.OnClientEvent:Connect(function(lykkedes, tekst, kind)
 	if lykkedes then
 		vindue.Visible = false
 		hint.Text = tekst
 		hint.Visible = true
-		venterPaaPlacering = true
+		if kind == "bucket" then
+			venterPaaPlacering = true          -- spand: næste klik placerer (uændret)
+		else
+			-- fisker: ligger nu i hotbaren -- skjul hintet igen efter et par sekunder
+			task.delay(4, function()
+				if not venterPaaPlacering then
+					hint.Visible = false
+				end
+			end)
+		end
 	else
 		besked.Text = tekst
 		besked.TextColor3 = Color3.fromRGB(240, 90, 90)
 	end
 end)
 
--- Placering: næste klik sætter fiskeren
+-- Placering af SPAND: næste klik sætter den (uændret flow)
 mus.Button1Down:Connect(function()
 	if venterPaaPlacering then
 		venterPaaPlacering = false
 		hint.Visible = false
 		placeFisher:FireServer(mus.Hit.Position)
+	end
+end)
+
+
+-- === FISKER-TOOLS i hotbaren ===
+-- Når et fisker-tool er equipped og spilleren klikker, placeres fiskeren dér.
+local hooked = {}   -- så vi ikke kobler samme tool på to gange
+
+local function hookTool(tool)
+	if tool:IsA("Tool") and tool:GetAttribute("FisherIndex") and not hooked[tool] then
+		hooked[tool] = true
+		-- Activated = spilleren klikker, mens tool'et er equipped
+		tool.Activated:Connect(function()
+			placeFisher:FireServer(mus.Hit.Position, tool)
+		end)
+	end
+end
+
+local backpack = spiller:WaitForChild("Backpack")
+for _, t in backpack:GetChildren() do
+	hookTool(t)
+end
+backpack.ChildAdded:Connect(hookTool)
+
+-- Efter respawn får spilleren en NY backpack -- lyt også på den
+spiller.ChildAdded:Connect(function(barn)
+	if barn:IsA("Backpack") then
+		barn.ChildAdded:Connect(hookTool)
 	end
 end)

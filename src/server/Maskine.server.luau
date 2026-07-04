@@ -404,39 +404,65 @@ buyFisher.OnServerEvent:Connect(function(spiller, kind, index)
 	local coins = spiller:GetAttribute("Coins") or 0
 	if coins >= price then
 		spiller:SetAttribute("Coins", coins - price)
-		spiller:SetAttribute("PendingKind", kind)      -- husk HVAD jeg skal placere
-		spiller:SetAttribute("PendingIndex", index or 0)
 
-		-- REBIRTH: husk at spilleren EJER denne fisker-type (uanset placering)
 		if kind == "fisher" then
 			local koebtDef = FisherConfig.fishers[index]
+
+			-- REBIRTH: husk at spilleren EJER denne fisker-type
+			-- (køb tæller som ejerskab, uanset om den er placeret eller ligger i backpacken)
 			if koebtDef and ownedFishers[spiller] then
 				ownedFishers[spiller][koebtDef.name] = true
 			end
-		end
 
-		buyFisher:FireClient(spiller, true, "Click on your plot to place it")
+			-- Læg fiskeren i backpacken som et Tool -> vises i hotbaren (tast 1-9)
+			local tool = Instance.new("Tool")
+			tool.Name = koebtDef.name                 -- navnet fra config vises i hotbaren
+			tool.RequiresHandle = false               -- ingen 3D-model endnu (placeholder)
+			tool.CanBeDropped = false                 -- kan ikke smides på jorden
+			tool.ToolTip = "Click on your plot to place"
+			tool:SetAttribute("FisherIndex", index)   -- hvilken fisker-type tool'et er
+			tool:SetAttribute("Robux", false)         -- robux-købte undtages ved rebirth (senere)
+			tool.Parent = spiller:FindFirstChildOfClass("Backpack") or spiller:WaitForChild("Backpack")
+
+			buyFisher:FireClient(spiller, true, "Added to your hotbar - press a number key", "fisher")
+		else
+			-- SPANDE: uændret flow -- klik direkte på plottet for at placere
+			spiller:SetAttribute("PendingKind", kind)
+			buyFisher:FireClient(spiller, true, "Click on your plot to place it", "bucket")
+		end
 	else
 		buyFisher:FireClient(spiller, false, "Not enough coins")
 	end
 end)
 
 -- === PLACERING (sker på serveren) ===
-placeFisher.OnServerEvent:Connect(function(spiller, klikPosition)
-	local kind = spiller:GetAttribute("PendingKind") or ""
+-- Fiskere: client sender sit equipped Tool med. Spande: uændret PendingKind-flow.
+placeFisher.OnServerEvent:Connect(function(spiller, klikPosition, tool)
+	-- FISKER via Tool fra hotbaren
+	if tool ~= nil then
+		-- Serveren tjekker selv: er det et ægte fisker-tool, og holder spilleren det?
+		if typeof(tool) == "Instance" and tool:IsA("Tool")
+			and tool:GetAttribute("FisherIndex")
+			and spiller.Character and tool:IsDescendantOf(spiller.Character) then
 
-	if kind == "fisher" then
-		local def = FisherConfig.fishers[spiller:GetAttribute("PendingIndex")]
-		if def then
-			spiller:SetAttribute("PendingKind", "")
-			local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
-			local part = lavFisker(def, placering)
-			-- REBIRTH: husk denne placering (robux=false -> ryddes ved rebirth)
-			if placedItems[spiller] then
-				table.insert(placedItems[spiller], { part = part, robux = false })
+			local def = FisherConfig.fishers[tool:GetAttribute("FisherIndex")]
+			if def then
+				-- PRÆCIS samme placeringsregler som før (løft 2 op, ingen andre regler)
+				local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
+				local part = lavFisker(def, placering)
+				-- REBIRTH: husk denne placering (robux-flag følger tool'et)
+				if placedItems[spiller] then
+					table.insert(placedItems[spiller], { part = part, robux = tool:GetAttribute("Robux") or false })
+				end
+				tool:Destroy()   -- fjern tool'et fra hotbaren efter placering
 			end
 		end
-	elseif kind == "bucket" then
+		return
+	end
+
+	-- SPAND (uændret)
+	local kind = spiller:GetAttribute("PendingKind") or ""
+	if kind == "bucket" then
 		spiller:SetAttribute("PendingKind", "")
 		local placering = Vector3.new(klikPosition.X, klikPosition.Y + 3, klikPosition.Z)  -- spand er 6 høj
 		local part = lavBucket(placering)
@@ -546,6 +572,20 @@ local function ryddPlot(spiller)
 	placedItems[spiller] = beholdt
 end
 
+-- Ryd UPLACEREDE fiskere i backpacken/hånden ved rebirth (robux-markerede undtages)
+local function ryddBackpackFiskere(spiller)
+	local steder = { spiller:FindFirstChildOfClass("Backpack"), spiller.Character }
+	for _, sted in steder do
+		if sted then
+			for _, ting in sted:GetChildren() do
+				if ting:IsA("Tool") and ting:GetAttribute("FisherIndex") and not ting:GetAttribute("Robux") then
+					ting:Destroy()
+				end
+			end
+		end
+	end
+end
+
 -- Client sender "do" (udfør rebirth) eller andet (bare giv mig status)
 rebirthEvent.OnServerEvent:Connect(function(spiller, handling)
 	if handling == "do" then
@@ -556,6 +596,7 @@ rebirthEvent.OnServerEvent:Connect(function(spiller, handling)
 			if coins >= niveau.requiredCoins and ejerAlleFiskere(spiller, niveau) then
 				spiller:SetAttribute("Coins", niveau.startingCoins or STARTKAPITAL)   -- start-coins efter rebirth
 				ryddPlot(spiller)                                      -- ryd plottet (ikke robux)
+				ryddBackpackFiskere(spiller)                           -- ryd uplacerede fiskere i hotbaren
 				playerFish[spiller] = {}                               -- ryd fangede (usolgte) fisk
 				opdaterFiskAntal(spiller)                              -- opdater HUD-tallet til 0
 				ownedFishers[spiller] = {}                             -- ejerskab nulstilles
