@@ -575,7 +575,7 @@ rebirthEvent.OnServerEvent:Connect(function(spiller, handling)
 			local coins = spiller:GetAttribute("Coins") or 0
 			-- Serveren tjekker ALTID kravene selv (kan ikke snydes fra client)
 			if coins >= niveau.requiredCoins and ejerAlleFiskere(spiller, niveau) then
-				spiller:SetAttribute("Coins", 0)                       -- nulstil coins
+				spiller:SetAttribute("Coins", niveau.startingCoins or STARTKAPITAL)   -- start-coins efter rebirth
 				ryddPlot(spiller)                                      -- ryd plottet (ikke robux)
 				ownedFishers[spiller] = {}                             -- ejerskab nulstilles
 				spiller:SetAttribute("Rebirths", (spiller:GetAttribute("Rebirths") or 0) + 1)
