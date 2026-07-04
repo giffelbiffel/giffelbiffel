@@ -488,29 +488,8 @@ end)
 
 -- === REBIRTH ===
 
--- Rebirth-stedet (grå placeholder-kasse ved plottet)
-local rebirthPad = Instance.new("Part")
-rebirthPad.Name = "RebirthPad"
-rebirthPad.Size = Vector3.new(4, 6, 4)
-rebirthPad.Position = Vector3.new(-26, 3, -60)   -- ved kanten af plottet
-rebirthPad.Anchored = true
-rebirthPad.BrickColor = BrickColor.new("Medium stone grey")
-rebirthPad.Parent = workspace
-
-local rebirthSkilt = Instance.new("BillboardGui")
-rebirthSkilt.Size = UDim2.new(0, 200, 0, 50)
-rebirthSkilt.StudsOffset = Vector3.new(0, 4, 0)
-rebirthSkilt.AlwaysOnTop = true
-rebirthSkilt.Parent = rebirthPad
-
-local rebirthTekst = Instance.new("TextLabel")
-rebirthTekst.Size = UDim2.new(1, 0, 1, 0)
-rebirthTekst.BackgroundTransparency = 1
-rebirthTekst.Font = Enum.Font.GothamBold
-rebirthTekst.TextScaled = true
-rebirthTekst.TextColor3 = Color3.fromRGB(255, 255, 255)
-rebirthTekst.Text = "REBIRTH"
-rebirthTekst.Parent = rebirthSkilt
+-- (Rebirth åbnes nu via en permanent skærm-knap i Rebirth.client.luau --
+--  der er ingen fysisk kasse i verdenen længere.)
 
 -- Hvilket niveau er det NÆSTE for denne spiller? (nil = max nået)
 local function naesteNiveau(spiller)

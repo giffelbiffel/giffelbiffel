@@ -1,6 +1,6 @@
 -- Rebirth.client.luau
--- Rebirth-menu (åbnes ved REBIRTH-stedet) + en fast HUD-linje med rebirths/multiplier.
--- Rører ikke de andre systemer -- lægger sig kun ovenpå.
+-- Rebirth-menu åbnet fra en PERMANENT skærm-knap (ikke længere en fysisk kasse).
+-- Rører ikke rebirth-logikken -- kun HVORDAN menuen åbnes/ses.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -52,7 +52,32 @@ opdaterHud()
 spiller:GetAttributeChangedSignal("Rebirths"):Connect(opdaterHud)
 spiller:GetAttributeChangedSignal("Multiplier"):Connect(opdaterHud)
 
--- --- Selve menuen (skjult fra start) ---
+-- --- Permanent ÅBN-knap i hjørnet (altid synlig) ---
+local aabnKnap = Instance.new("TextButton")
+aabnKnap.Name = "OpenRebirth"
+aabnKnap.AnchorPoint = Vector2.new(0, 1)
+aabnKnap.Position = UDim2.new(0, 20, 1, -20)      -- nederste venstre hjørne
+aabnKnap.Size = UDim2.new(0, 150, 0, 44)
+aabnKnap.BackgroundColor3 = Color3.fromRGB(70, 70, 78)
+aabnKnap.Text = "REBIRTH"
+aabnKnap.TextColor3 = Color3.fromRGB(255, 255, 255)
+aabnKnap.Font = Enum.Font.GothamBold
+aabnKnap.TextScaled = true
+aabnKnap.Parent = skaerm
+Instance.new("UICorner").Parent = aabnKnap
+
+-- --- Baggrund bag menuen (klik udenfor for at lukke) ---
+local baggrund = Instance.new("TextButton")
+baggrund.Name = "Backdrop"
+baggrund.Size = UDim2.new(1, 0, 1, 0)
+baggrund.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+baggrund.BackgroundTransparency = 0.5
+baggrund.Text = ""
+baggrund.AutoButtonColor = false
+baggrund.Visible = false
+baggrund.Parent = skaerm
+
+-- --- Selve menu-vinduet (oven på baggrunden) ---
 local vindue = Instance.new("Frame")
 vindue.AnchorPoint = Vector2.new(0.5, 0.5)
 vindue.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -97,6 +122,7 @@ rebirthKnap.TextScaled = true
 rebirthKnap.Parent = vindue
 Instance.new("UICorner").Parent = rebirthKnap
 
+-- X/Luk-knap
 local lukKnap = Instance.new("TextButton")
 lukKnap.Size = UDim2.new(0, 150, 0, 40)
 lukKnap.Position = UDim2.new(1, -162, 1, -50)
@@ -129,7 +155,6 @@ local function tegnMenu()
 	local coins = spiller:GetAttribute("Coins") or 0
 	local coinsOK = coins >= s.requiredCoins
 
-	-- liste af krævede fiskere (eller "none")
 	local fiskereTekst = "none"
 	if #s.requiredFishers > 0 then
 		fiskereTekst = table.concat(s.requiredFishers, ", ")
@@ -154,6 +179,15 @@ local function tegnMenu()
 	end
 end
 
+-- Åbn/luk menuen
+local function saetMenu(aaben)
+	baggrund.Visible = aaben
+	vindue.Visible = aaben
+	if aaben then
+		rebirthEvent:FireServer("status")   -- bed om frisk status hver gang den åbnes
+	end
+end
+
 -- Coins ændrer sig ofte (salg) -> opdatér knappen live mens menuen er åben
 spiller:GetAttributeChangedSignal("Coins"):Connect(function()
 	if vindue.Visible then
@@ -162,19 +196,17 @@ spiller:GetAttributeChangedSignal("Coins"):Connect(function()
 end)
 
 
--- === Åbn menuen ved REBIRTH-stedet ===
-local pad = workspace:WaitForChild("RebirthPad")
-pad.Touched:Connect(function(andetObjekt)
-	if andetObjekt.Parent == spiller.Character and not vindue.Visible then
-		rebirthEvent:FireServer("status")   -- bed om frisk status
-		vindue.Visible = true
-	end
+-- === Knapper ===
+aabnKnap.MouseButton1Click:Connect(function()
+	saetMenu(true)
 end)
 
--- Serveren sender status (ved åbning OG efter en rebirth)
-rebirthEvent.OnClientEvent:Connect(function(status)
-	senesteStatus = status
-	tegnMenu()
+baggrund.MouseButton1Click:Connect(function()
+	saetMenu(false)   -- klik udenfor lukker
+end)
+
+lukKnap.MouseButton1Click:Connect(function()
+	saetMenu(false)
 end)
 
 rebirthKnap.MouseButton1Click:Connect(function()
@@ -183,6 +215,8 @@ rebirthKnap.MouseButton1Click:Connect(function()
 	end
 end)
 
-lukKnap.MouseButton1Click:Connect(function()
-	vindue.Visible = false
+-- Serveren sender status (ved åbning OG efter en rebirth)
+rebirthEvent.OnClientEvent:Connect(function(status)
+	senesteStatus = status
+	tegnMenu()
 end)
