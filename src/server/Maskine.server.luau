@@ -556,6 +556,8 @@ rebirthEvent.OnServerEvent:Connect(function(spiller, handling)
 			if coins >= niveau.requiredCoins and ejerAlleFiskere(spiller, niveau) then
 				spiller:SetAttribute("Coins", niveau.startingCoins or STARTKAPITAL)   -- start-coins efter rebirth
 				ryddPlot(spiller)                                      -- ryd plottet (ikke robux)
+				playerFish[spiller] = {}                               -- ryd fangede (usolgte) fisk
+				opdaterFiskAntal(spiller)                              -- opdater HUD-tallet til 0
 				ownedFishers[spiller] = {}                             -- ejerskab nulstilles
 				spiller:SetAttribute("Rebirths", (spiller:GetAttribute("Rebirths") or 0) + 1)
 				spiller:SetAttribute("Multiplier", niveau.multiplier)  -- ny TOTAL multiplier
