@@ -30,6 +30,11 @@ local rebirthEvent = Instance.new("RemoteEvent")
 rebirthEvent.Name = "Rebirth"
 rebirthEvent.Parent = ReplicatedStorage
 
+-- Walkie-talkie til upgrade-menuen
+local upgradeEvent = Instance.new("RemoteEvent")
+upgradeEvent.Name = "Upgrade"
+upgradeEvent.Parent = ReplicatedStorage
+
 
 -- === Sjældenheds-system: fiskene fra FishConfig, oddsene fra hver fisker ===
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
@@ -112,6 +117,85 @@ local ownedFishers = {}   -- spiller -> { [fiskerNavn] = true }
 local placedItems = {}    -- spiller -> liste af { part, robux }
 
 
+-- === UPGRADE-system: niveauer per fisker-TYPE, per spiller (i hukommelsen for nu) ===
+local FisherUpgradeConfig = require(ReplicatedStorage:WaitForChild("FisherUpgradeConfig"))
+
+local upgradeLevels = {}   -- spiller -> { [fiskerNavn] = { speed = 0, capacity = 0, catchChance = 0 } }
+
+-- Hent (eller opret) spillerens niveauer for en fisker-type
+local function getNiveauer(spiller, fiskerNavn)
+	local mine = upgradeLevels[spiller]
+	if not mine then
+		return { speed = 0, capacity = 0, catchChance = 0 }   -- spiller væk -> ingen bonus
+	end
+	if not mine[fiskerNavn] then
+		mine[fiskerNavn] = { speed = 0, capacity = 0, catchChance = 0 }
+	end
+	return mine[fiskerNavn]
+end
+
+-- Læg bonusserne sammen for alle nåede niveauer i et spor (fx 3 x +5% = 15)
+local function totalBonusPct(sporListe, niveau)
+	local sum = 0
+	if sporListe then
+		for i = 1, math.min(niveau, #sporListe) do
+			sum += sporListe[i].bonus
+		end
+	end
+	return sum
+end
+
+-- catchChance-bonus: gang vægtene op for alle sjældenheder UNDTAGEN den mest
+-- almindelige (den første i rarityOrder). Så vokser chancen for sjældne fisk,
+-- mens grundværdierne i config aldrig røres.
+local function justeretChances(chances, bonusPct)
+	if bonusPct <= 0 then
+		return chances
+	end
+	local mestAlmindelig = FishConfig.rarityOrder[1]
+	local ny = {}
+	for rarity, vaegt in chances do
+		if rarity == mestAlmindelig then
+			ny[rarity] = vaegt
+		else
+			ny[rarity] = vaegt * (1 + bonusPct / 100)
+		end
+	end
+	return ny
+end
+
+-- Byg en status til upgrade-menuen for én fisker-type og send den til spilleren
+local SPOR_NAVNE = { "speed", "capacity", "catchChance" }
+
+local function sendUpgradeStatus(spiller, fiskerNavn)
+	local spor = FisherUpgradeConfig[fiskerNavn]
+	if not spor then return end
+
+	local niveauer = getNiveauer(spiller, fiskerNavn)
+	local status = { fisher = fiskerNavn, tracks = {} }
+
+	for _, sporNavn in SPOR_NAVNE do
+		local liste = spor[sporNavn]
+		if liste and #liste > 0 then                     -- kun spor der findes i config'en
+			local niveau = niveauer[sporNavn] or 0
+			local t = {
+				track = sporNavn,
+				level = niveau,
+				maxLevel = #liste,                        -- max = antal linjer i config
+				totalBonus = totalBonusPct(liste, niveau),
+			}
+			if niveau < #liste then
+				t.nextPrice = liste[niveau + 1].price
+				t.nextBonus = liste[niveau + 1].bonus
+			end
+			table.insert(status.tracks, t)
+		end
+	end
+
+	upgradeEvent:FireClient(spiller, status)
+end
+
+
 -- === OPSKRIFT: lav ét plot ===
 local function lavPlot(position)
 	local plot = Instance.new("Part")
@@ -158,6 +242,7 @@ local function spillerJoinede(spiller)
 	spiller:SetAttribute("Multiplier", 1)         -- salgsmultiplier (1 = ingen endnu)
 	ownedFishers[spiller] = {}                     -- endnu ejet ingen fiskere
 	placedItems[spiller] = {}                      -- endnu placeret intet
+	upgradeLevels[spiller] = {}                    -- ingen upgrades endnu
 	plot:SetAttribute("Owner", spiller.UserId)
 	plot.Skilt.Navn.Text = spiller.Name .. "'s plot"
 end
@@ -170,6 +255,7 @@ Players.PlayerRemoving:Connect(function(spiller)
 	playerFish[spiller] = nil                    -- ryd op når spilleren forlader
 	ownedFishers[spiller] = nil
 	placedItems[spiller] = nil
+	upgradeLevels[spiller] = nil
 end)
 
 
@@ -190,7 +276,7 @@ local function foersteLedigeSpand()
 end
 
 -- === OPSKRIFT: lav én fisker ud fra en config-blok ===
-local function lavFisker(def, position)
+local function lavFisker(def, position, ejer)
 	local fisker = Instance.new("Part")
 	fisker.Name = def.name
 	fisker.Size = Vector3.new(4, 4, 4)
@@ -201,6 +287,33 @@ local function lavFisker(def, position)
 	fisker:SetAttribute("Indhold", 0)
 
 	local fisherList = {}   -- de individuelle fisk denne fisker holder lige nu
+
+	-- Effektive værdier = grundværdi fra config GANGET med ejerens upgrade-bonus.
+	-- Beregnes LIVE hver gang, så en ny upgrade virker med det samme på alle placerede.
+	local spor = FisherUpgradeConfig[def.name]
+
+	local function effektivVentetid()
+		local pct = totalBonusPct(spor and spor.speed, ejer and getNiveauer(ejer, def.name).speed or 0)
+		return def.catchEvery / (1 + pct / 100)     -- +50% speed = fanger 1.5x så tit
+	end
+
+	local function effektivKapacitet()
+		local pct = totalBonusPct(spor and spor.capacity, ejer and getNiveauer(ejer, def.name).capacity or 0)
+		return math.floor(def.capacity * (1 + pct / 100))
+	end
+
+	local function effektiveChances()
+		local pct = totalBonusPct(spor and spor.catchChance, ejer and getNiveauer(ejer, def.name).catchChance or 0)
+		return justeretChances(def.chances or DEFAULT_CHANCES, pct)
+	end
+
+	-- Klik på fiskeren -> åbn upgrade-menuen for dens TYPE (hos den der klikkede)
+	local klik = Instance.new("ClickDetector")
+	klik.MaxActivationDistance = 40
+	klik.Parent = fisker
+	klik.MouseClick:Connect(function(spiller)
+		sendUpgradeStatus(spiller, def.name)
+	end)
 
 	local skilt = Instance.new("BillboardGui")
 	skilt.Size = UDim2.new(0, 200, 0, 50)
@@ -217,11 +330,12 @@ local function lavFisker(def, position)
 
 	local function opdaterSkilt()
 		local indhold = fisker:GetAttribute("Indhold")
-		if indhold >= def.capacity then
+		local kapacitet = effektivKapacitet()
+		if indhold >= kapacitet then
 			tekst.Text = "INVENTORY FULL"
 			tekst.TextColor3 = Color3.fromRGB(230, 50, 50)
 		else
-			tekst.Text = indhold .. " / " .. def.capacity
+			tekst.Text = indhold .. " / " .. kapacitet
 			tekst.TextColor3 = Color3.fromRGB(60, 220, 90)
 		end
 	end
@@ -241,12 +355,12 @@ local function lavFisker(def, position)
 	-- Fang fisk over tid (egen tråd)
 	task.spawn(function()
 		while true do
-			task.wait(def.catchEvery)
+			task.wait(effektivVentetid())            -- speed-upgrade = kortere ventetid
 			if not fisker.Parent then break end   -- fiskeren er fjernet (fx ved rebirth) -> stop
 
 			for _ = 1, def.fishPerCatch do
-				-- rul en fisk ud fra DENNE fiskers egen chance-tabel (eller standard)
-				local fisk = rollFish(def.chances or DEFAULT_CHANCES)
+				-- rul en fisk med catchChance-justerede odds
+				local fisk = rollFish(effektiveChances())
 
 				if fisk then
 					local spand = foersteLedigeSpand()   -- laveste ikke-fulde spand
@@ -254,7 +368,7 @@ local function lavFisker(def, position)
 						-- der er en spand med plads -> fisken flyder derhen
 						table.insert(spand.list, fisk)
 						spand.part:SetAttribute("Indhold", #spand.list)
-					elseif #fisherList < def.capacity then
+					elseif #fisherList < effektivKapacitet() then
 						-- FØRST når ALLE spande er fulde: fiskeren beholder fisken selv
 						table.insert(fisherList, fisk)
 						fisker:SetAttribute("Indhold", #fisherList)
@@ -449,7 +563,7 @@ placeFisher.OnServerEvent:Connect(function(spiller, klikPosition, tool)
 			if def then
 				-- PRÆCIS samme placeringsregler som før (løft 2 op, ingen andre regler)
 				local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
-				local part = lavFisker(def, placering)
+				local part = lavFisker(def, placering, spiller)   -- ejer = til upgrade-bonusser
 				-- REBIRTH: husk denne placering (robux-flag følger tool'et)
 				if placedItems[spiller] then
 					table.insert(placedItems[spiller], { part = part, robux = tool:GetAttribute("Robux") or false })
@@ -600,6 +714,7 @@ rebirthEvent.OnServerEvent:Connect(function(spiller, handling)
 				playerFish[spiller] = {}                               -- ryd fangede (usolgte) fisk
 				opdaterFiskAntal(spiller)                              -- opdater HUD-tallet til 0
 				ownedFishers[spiller] = {}                             -- ejerskab nulstilles
+				upgradeLevels[spiller] = {}                            -- alle upgrades til niveau 0
 				spiller:SetAttribute("Rebirths", (spiller:GetAttribute("Rebirths") or 0) + 1)
 				spiller:SetAttribute("Multiplier", niveau.multiplier)  -- ny TOTAL multiplier
 			end
@@ -608,4 +723,26 @@ rebirthEvent.OnServerEvent:Connect(function(spiller, handling)
 	sendRebirthStatus(spiller)   -- send altid opdateret status tilbage
 end)
 
-print("Fiskeri-tycoon klar (sjældenhed + sælg-menu + rebirth).")
+-- === UPGRADE-KØB (sker på serveren) ===
+upgradeEvent.OnServerEvent:Connect(function(spiller, handling, fiskerNavn, sporNavn)
+	if handling == "buy" then
+		local spor = FisherUpgradeConfig[fiskerNavn]
+		local liste = spor and spor[sporNavn]
+		if liste then
+			local niveauer = getNiveauer(spiller, fiskerNavn)
+			local niveau = niveauer[sporNavn] or 0
+			if niveau < #liste then                           -- ikke max endnu
+				local pris = liste[niveau + 1].price
+				local coins = spiller:GetAttribute("Coins") or 0
+				if coins >= pris then                          -- serveren tjekker råd selv
+					spiller:SetAttribute("Coins", coins - pris)
+					niveauer[sporNavn] = niveau + 1
+					-- Placerede fiskere læser niveauet live -> bonussen virker med det samme
+				end
+			end
+		end
+	end
+	sendUpgradeStatus(spiller, fiskerNavn)   -- send altid frisk status (menuen opdaterer sig)
+end)
+
+print("Fiskeri-tycoon klar (sjældenhed + sælg-menu + rebirth + upgrades).")
