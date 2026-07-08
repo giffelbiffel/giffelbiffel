@@ -12,7 +12,6 @@ local FisherConfig = require(ReplicatedStorage:WaitForChild("FisherConfig"))
 local buyFisher = ReplicatedStorage:WaitForChild("BuyFisher")
 local placeFisher = ReplicatedStorage:WaitForChild("PlaceFisher")
 
-local venterPaaPlacering = false
 
 -- === Skærm-lag ===
 local skaerm = Instance.new("ScreenGui")
@@ -139,44 +138,30 @@ lukKnap.MouseButton1Click:Connect(function()
 	vindue.Visible = false
 end)
 
--- Serverens svar på et køb
-buyFisher.OnClientEvent:Connect(function(lykkedes, tekst, kind)
+-- Serverens svar på et køb (både fiskere og spande lander i hotbaren)
+buyFisher.OnClientEvent:Connect(function(lykkedes, tekst)
 	if lykkedes then
 		vindue.Visible = false
 		hint.Text = tekst
 		hint.Visible = true
-		if kind == "bucket" then
-			venterPaaPlacering = true          -- spand: næste klik placerer (uændret)
-		else
-			-- fisker: ligger nu i hotbaren -- skjul hintet igen efter et par sekunder
-			task.delay(4, function()
-				if not venterPaaPlacering then
-					hint.Visible = false
-				end
-			end)
-		end
+		task.delay(4, function()          -- skjul hintet igen efter et par sekunder
+			hint.Visible = false
+		end)
 	else
 		besked.Text = tekst
 		besked.TextColor3 = Color3.fromRGB(240, 90, 90)
 	end
 end)
 
--- Placering af SPAND: næste klik sætter den (uændret flow)
-mus.Button1Down:Connect(function()
-	if venterPaaPlacering then
-		venterPaaPlacering = false
-		hint.Visible = false
-		placeFisher:FireServer(mus.Hit.Position)
-	end
-end)
 
-
--- === FISKER-TOOLS i hotbaren ===
--- Når et fisker-tool er equipped og spilleren klikker, placeres fiskeren dér.
+-- === TOOLS i hotbaren (fiskere OG spande) ===
+-- Når et tool er equipped og spilleren klikker, placeres tingen dér.
 local hooked = {}   -- så vi ikke kobler samme tool på to gange
 
 local function hookTool(tool)
-	if tool:IsA("Tool") and tool:GetAttribute("FisherIndex") and not hooked[tool] then
+	if tool:IsA("Tool")
+		and (tool:GetAttribute("FisherIndex") or tool:GetAttribute("IsBucket"))
+		and not hooked[tool] then
 		hooked[tool] = true
 		-- Activated = spilleren klikker, mens tool'et er equipped
 		tool.Activated:Connect(function()
