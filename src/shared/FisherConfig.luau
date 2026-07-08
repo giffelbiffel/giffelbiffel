@@ -31,7 +31,7 @@ return {
 			fishPerCatch = 1,
 			catchEvery = 1.5,
 			capacity = 20,
-			chances = { basic = 80, Rare = 15, Epic = 4, Legendary = 1 },
+			chances = { Basic = 80, Rare = 15, Epic = 4, Legendary = 1 },
 		},
 		{
 			name = "Better Fisher",
