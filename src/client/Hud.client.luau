@@ -3,7 +3,9 @@
 -- Dette er et CLIENT-script: det kører på min egen skærm, ikke på serveren.
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local spiller = Players.LocalPlayer            -- "mig" på min egen skærm
+local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 
 -- 1. Lav selve skærm-laget, som teksten skal ligge på
 local skaerm = Instance.new("ScreenGui")
@@ -31,7 +33,7 @@ hjoerne.Parent = boks
 local function opdaterHud()
 	local coins = spiller:GetAttribute("Coins") or 0   -- min valuta
 	local fisk = spiller:GetAttribute("Fisk") or 0     -- fisk fanget i alt
-	boks.Text = "Coins: " .. coins .. "\nFish: " .. fisk   -- \n = ny linje
+	boks.Text = "Coins: " .. FormatNumber(coins) .. "\nFish: " .. FormatNumber(fisk)   -- \n = ny linje
 end
 
 opdaterHud()                                   -- Vis det med det samme

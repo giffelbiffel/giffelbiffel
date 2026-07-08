@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local spiller = Players.LocalPlayer
 
 local upgradeEvent = ReplicatedStorage:WaitForChild("Upgrade")
+local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 
 local senesteStatus = nil
 
@@ -120,7 +121,7 @@ local function tegnMenu()
 		Instance.new("UICorner").Parent = knap
 
 		if t.nextPrice then
-			knap.Text = t.nextPrice .. "c  (+" .. t.nextBonus .. "%)"
+			knap.Text = FormatNumber(t.nextPrice) .. "c  (+" .. t.nextBonus .. "%)"
 			if coins >= t.nextPrice then
 				knap.BackgroundColor3 = Color3.fromRGB(60, 200, 90)    -- grøn: har råd
 				knap.MouseButton1Click:Connect(function()
