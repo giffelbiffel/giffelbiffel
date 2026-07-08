@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local spiller = Players.LocalPlayer
 
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
+local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 local openSell = ReplicatedStorage:WaitForChild("OpenSellMenu")
 local sellAll = ReplicatedStorage:WaitForChild("SellAll")
 
@@ -128,8 +129,8 @@ local function visListe(summary)
 		raekke.TextScaled = true
 		raekke.TextXAlignment = Enum.TextXAlignment.Left
 		raekke.TextColor3 = FishConfig.colors[gruppe.rarity] or Color3.fromRGB(255, 255, 255)
-		raekke.Text = "x" .. gruppe.count .. "   " .. gruppe.name
-			.. "  [" .. gruppe.rarity .. "]   " .. gruppe.value .. "c each"
+		raekke.Text = "x" .. FormatNumber(gruppe.count) .. "   " .. gruppe.name
+			.. "  [" .. gruppe.rarity .. "]   " .. FormatNumber(gruppe.value) .. "c each"
 		raekke.Parent = liste
 	end
 end

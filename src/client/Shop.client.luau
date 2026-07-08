@@ -8,6 +8,7 @@ local mus = spiller:GetMouse()
 
 -- Læs den SAMME config som serveren
 local FisherConfig = require(ReplicatedStorage:WaitForChild("FisherConfig"))
+local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 
 local buyFisher = ReplicatedStorage:WaitForChild("BuyFisher")
 local placeFisher = ReplicatedStorage:WaitForChild("PlaceFisher")
@@ -62,7 +63,7 @@ for index, fisker in FisherConfig.fishers do
 	knap.TextColor3 = Color3.fromRGB(255, 255, 255)
 	knap.Font = Enum.Font.GothamBold
 	knap.TextScaled = true
-	knap.Text = "Buy " .. fisker.name .. " - " .. fisker.price .. " coins"
+	knap.Text = "Buy " .. fisker.name .. " - " .. FormatNumber(fisker.price) .. " coins"
 	knap.Parent = vindue
 	Instance.new("UICorner").Parent = knap
 
@@ -80,7 +81,7 @@ spandKnap.BackgroundColor3 = Color3.fromRGB(230, 200, 60)   -- gul som spanden
 spandKnap.TextColor3 = Color3.fromRGB(40, 40, 40)
 spandKnap.Font = Enum.Font.GothamBold
 spandKnap.TextScaled = true
-spandKnap.Text = "Buy " .. FisherConfig.bucket.name .. " - " .. FisherConfig.bucket.price .. " coins"
+spandKnap.Text = "Buy " .. FisherConfig.bucket.name .. " - " .. FormatNumber(FisherConfig.bucket.price) .. " coins"
 spandKnap.Parent = vindue
 Instance.new("UICorner").Parent = spandKnap
 

@@ -10,20 +10,8 @@ local rebirthEvent = ReplicatedStorage:WaitForChild("Rebirth")
 
 local senesteStatus = nil   -- den seneste status serveren sendte
 
--- Lille hjælper: skriv store tal pænt, fx 5000000 -> "5,000,000"
-local function formatTal(n)
-	local s = tostring(math.floor(n))
-	local ud = ""
-	local count = 0
-	for i = #s, 1, -1 do
-		ud = s:sub(i, i) .. ud
-		count += 1
-		if count % 3 == 0 and i > 1 then
-			ud = "," .. ud
-		end
-	end
-	return ud
-end
+-- Fælles tal-formatering (5000000 -> "5M")
+local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 
 -- === Skærm-lag ===
 local skaerm = Instance.new("ScreenGui")
@@ -163,7 +151,7 @@ local function tegnMenu()
 	info.Text = "Rebirths: " .. s.rebirths
 		.. "\nCurrent multiplier: " .. s.currentMultiplier .. "x"
 		.. "\n\nNext (Level " .. s.levelNumber .. "):"
-		.. "\n  Coins: " .. formatTal(coins) .. " / " .. formatTal(s.requiredCoins)
+		.. "\n  Coins: " .. FormatNumber(coins) .. " / " .. FormatNumber(s.requiredCoins)
 			.. (coinsOK and "  OK" or "  X")
 		.. "\n  Fishers: " .. fiskereTekst
 			.. (s.ownsAllFishers and "  OK" or "  X")

@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local FisherConfig = require(ReplicatedStorage:WaitForChild("FisherConfig"))
+local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 
 -- Walkie-talkier mellem client og server
 local buyFisher = Instance.new("RemoteEvent")
@@ -335,7 +336,7 @@ local function lavFisker(def, position, ejer)
 			tekst.Text = "INVENTORY FULL"
 			tekst.TextColor3 = Color3.fromRGB(230, 50, 50)
 		else
-			tekst.Text = indhold .. " / " .. kapacitet
+			tekst.Text = FormatNumber(indhold) .. " / " .. FormatNumber(kapacitet)
 			tekst.TextColor3 = Color3.fromRGB(60, 220, 90)
 		end
 	end
@@ -418,7 +419,7 @@ local function lavBucket(position)
 			tekst.Text = "FULL"
 			tekst.TextColor3 = Color3.fromRGB(230, 50, 50)
 		else
-			tekst.Text = indhold .. " / " .. kapacitet
+			tekst.Text = FormatNumber(indhold) .. " / " .. FormatNumber(kapacitet)
 			tekst.TextColor3 = Color3.fromRGB(60, 220, 90)
 		end
 	end
