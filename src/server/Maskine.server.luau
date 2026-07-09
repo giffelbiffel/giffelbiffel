@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local FisherConfig = require(ReplicatedStorage:WaitForChild("FisherConfig"))
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
+local PlacementRules = require(ReplicatedStorage:WaitForChild("PlacementRules"))
 
 -- Walkie-talkier mellem client og server
 local buyFisher = Instance.new("RemoteEvent")
@@ -564,6 +565,9 @@ placeFisher.OnServerEvent:Connect(function(spiller, klikPosition, tool)
 	-- Serveren tjekker selv: er det et ægte tool, og holder spilleren det?
 	if typeof(tool) ~= "Instance" or not tool:IsA("Tool") then return end
 	if not (spiller.Character and tool:IsDescendantOf(spiller.Character)) then return end
+
+	-- SAMME regel som spøgelsets grøn/rød (fælles modul) -> rødt klik afvises her
+	if not PlacementRules.erGyldig(klikPosition) then return end
 
 	if tool:GetAttribute("FisherIndex") then
 		-- FISKER
