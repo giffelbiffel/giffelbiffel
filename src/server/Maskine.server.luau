@@ -37,6 +37,21 @@ local upgradeEvent = Instance.new("RemoteEvent")
 upgradeEvent.Name = "Upgrade"
 upgradeEvent.Parent = ReplicatedStorage
 
+-- Walkie-talkie til coin-popup ved salg (ren visuel besked: "du tjente X")
+local sellPopup = Instance.new("RemoteEvent")
+sellPopup.Name = "SellPopup"
+sellPopup.Parent = ReplicatedStorage
+
+
+-- === FANGST-EFFEKT (visuel -- nem at style om her) ===
+local FANGST_EFFEKT = {
+	antal = 6,                                  -- partikler per fangst
+	farve = Color3.fromRGB(120, 200, 255),      -- lyseblåt "vandsprøjt"
+	levetid = 0.5,                              -- sekunder per partikel (kort, under 1 sek)
+	fart = 6,                                   -- hvor hurtigt de flyver ud
+	stoerrelse = 0.35,                          -- partikel-størrelse
+}
+
 
 -- === Sjældenheds-system: fiskene fra FishConfig, oddsene fra hver fisker ===
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
@@ -290,6 +305,17 @@ local function lavFisker(def, position, ejer)
 
 	local fisherList = {}   -- de individuelle fisk denne fisker holder lige nu
 
+	-- Partikel-effekt ved fangst (indbyggede Roblox-partikler, ingen teksturer).
+	-- Enabled = false -> den kører IKKE hele tiden; vi kalder :Emit() per fangst.
+	local effekt = Instance.new("ParticleEmitter")
+	effekt.Enabled = false
+	effekt.Color = ColorSequence.new(FANGST_EFFEKT.farve)
+	effekt.Lifetime = NumberRange.new(FANGST_EFFEKT.levetid)
+	effekt.Speed = NumberRange.new(FANGST_EFFEKT.fart)
+	effekt.SpreadAngle = Vector2.new(180, 180)     -- sprøjt i alle retninger
+	effekt.Size = NumberSequence.new(FANGST_EFFEKT.stoerrelse)
+	effekt.Parent = fisker
+
 	-- Effektive værdier = grundværdi fra config GANGET med ejerens upgrade-bonus.
 	-- Beregnes LIVE hver gang, så en ny upgrade virker med det samme på alle placerede.
 	local spor = FisherUpgradeConfig[def.name]
@@ -360,6 +386,8 @@ local function lavFisker(def, position, ejer)
 			task.wait(effektivVentetid())            -- speed-upgrade = kortere ventetid
 			if not fisker.Parent then break end   -- fiskeren er fjernet (fx ved rebirth) -> stop
 
+			local fangetNoget = false
+
 			for _ = 1, def.fishPerCatch do
 				-- rul en fisk med catchChance-justerede odds
 				local fisk = rollFish(effektiveChances())
@@ -370,14 +398,20 @@ local function lavFisker(def, position, ejer)
 						-- der er en spand med plads -> fisken flyder derhen
 						table.insert(spand.list, fisk)
 						spand.part:SetAttribute("Indhold", #spand.list)
+						fangetNoget = true
 					elseif #fisherList < effektivKapacitet() then
 						-- FØRST når ALLE spande er fulde: fiskeren beholder fisken selv
 						table.insert(fisherList, fisk)
 						fisker:SetAttribute("Indhold", #fisherList)
 						opdaterSkilt()
+						fangetNoget = true
 					end
 					-- er alle spande OG fiskeren fulde: der fanges ikke mere (som før)
 				end
+			end
+
+			if fangetNoget then
+				effekt:Emit(FANGST_EFFEKT.antal)   -- kort partikel-burst ved fangst
 			end
 		end
 	end)
@@ -627,6 +661,7 @@ sellAll.OnServerEvent:Connect(function(spiller)
 		local mult = spiller:GetAttribute("Multiplier") or 1   -- rebirth-multiplier
 		local tjent = math.floor(total * mult)                 -- gang oveni -- rør ikke grundværdien
 		spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjent)
+		sellPopup:FireClient(spiller, tjent)                   -- vis "+X" popup (ren visuel)
 	end
 	playerFish[spiller] = {}                              -- beholdningen er tom nu
 	opdaterFiskAntal(spiller)
