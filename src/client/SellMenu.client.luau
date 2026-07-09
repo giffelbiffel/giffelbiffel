@@ -7,6 +7,7 @@ local spiller = Players.LocalPlayer
 
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
+local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
 local openSell = ReplicatedStorage:WaitForChild("OpenSellMenu")
 local sellAll = ReplicatedStorage:WaitForChild("SellAll")
 
@@ -71,6 +72,7 @@ sellKnap.Font = Enum.Font.GothamBold
 sellKnap.TextScaled = true
 sellKnap.Parent = vindue
 Instance.new("UICorner").Parent = sellKnap
+AnimerKnap(sellKnap)
 
 -- Luk-knap
 local lukKnap = Instance.new("TextButton")
@@ -83,6 +85,7 @@ lukKnap.Font = Enum.Font.GothamBold
 lukKnap.TextScaled = true
 lukKnap.Parent = vindue
 Instance.new("UICorner").Parent = lukKnap
+AnimerKnap(lukKnap)
 
 
 -- === Byg rækkerne ud fra serverens oversigt ===

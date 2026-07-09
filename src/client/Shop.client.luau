@@ -9,6 +9,7 @@ local mus = spiller:GetMouse()
 -- Læs den SAMME config som serveren
 local FisherConfig = require(ReplicatedStorage:WaitForChild("FisherConfig"))
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
+local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
 
 local buyFisher = ReplicatedStorage:WaitForChild("BuyFisher")
 local placeFisher = ReplicatedStorage:WaitForChild("PlaceFisher")
@@ -66,6 +67,7 @@ for index, fisker in FisherConfig.fishers do
 	knap.Text = "Buy " .. fisker.name .. " - " .. FormatNumber(fisker.price) .. " coins"
 	knap.Parent = vindue
 	Instance.new("UICorner").Parent = knap
+	AnimerKnap(knap)
 
 	-- Klik = bed serveren om at købe netop DENNE fisker (send "fisher" + nummer)
 	knap.MouseButton1Click:Connect(function()
@@ -84,6 +86,7 @@ spandKnap.TextScaled = true
 spandKnap.Text = "Buy " .. FisherConfig.bucket.name .. " - " .. FormatNumber(FisherConfig.bucket.price) .. " coins"
 spandKnap.Parent = vindue
 Instance.new("UICorner").Parent = spandKnap
+AnimerKnap(spandKnap)
 
 spandKnap.MouseButton1Click:Connect(function()
 	buyFisher:FireServer("bucket")
@@ -110,6 +113,7 @@ lukKnap.Font = Enum.Font.GothamBold
 lukKnap.TextScaled = true
 lukKnap.Parent = vindue
 Instance.new("UICorner").Parent = lukKnap
+AnimerKnap(lukKnap)
 
 -- Hjælpe-tekst i toppen mens jeg placerer
 local hint = Instance.new("TextLabel")

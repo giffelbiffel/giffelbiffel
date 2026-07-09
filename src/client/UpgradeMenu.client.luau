@@ -8,6 +8,7 @@ local spiller = Players.LocalPlayer
 
 local upgradeEvent = ReplicatedStorage:WaitForChild("Upgrade")
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
+local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
 
 local senesteStatus = nil
 
@@ -66,6 +67,7 @@ lukKnap.Font = Enum.Font.GothamBold
 lukKnap.TextScaled = true
 lukKnap.Parent = vindue
 Instance.new("UICorner").Parent = lukKnap
+AnimerKnap(lukKnap)
 
 lukKnap.MouseButton1Click:Connect(function()
 	vindue.Visible = false
@@ -119,6 +121,7 @@ local function tegnMenu()
 		knap.TextScaled = true
 		knap.Parent = raekke
 		Instance.new("UICorner").Parent = knap
+		AnimerKnap(knap)
 
 		if t.nextPrice then
 			knap.Text = FormatNumber(t.nextPrice) .. "c  (+" .. t.nextBonus .. "%)"

@@ -12,6 +12,7 @@ local senesteStatus = nil   -- den seneste status serveren sendte
 
 -- Fælles tal-formatering (5000000 -> "5M")
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
+local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
 
 -- === Skærm-lag ===
 local skaerm = Instance.new("ScreenGui")
@@ -53,6 +54,7 @@ aabnKnap.Font = Enum.Font.GothamBold
 aabnKnap.TextScaled = true
 aabnKnap.Parent = skaerm
 Instance.new("UICorner").Parent = aabnKnap
+AnimerKnap(aabnKnap)
 
 -- --- Baggrund bag menuen (klik udenfor for at lukke) ---
 local baggrund = Instance.new("TextButton")
@@ -109,6 +111,7 @@ rebirthKnap.Font = Enum.Font.GothamBold
 rebirthKnap.TextScaled = true
 rebirthKnap.Parent = vindue
 Instance.new("UICorner").Parent = rebirthKnap
+AnimerKnap(rebirthKnap)
 
 -- X/Luk-knap
 local lukKnap = Instance.new("TextButton")
@@ -121,6 +124,7 @@ lukKnap.Font = Enum.Font.GothamBold
 lukKnap.TextScaled = true
 lukKnap.Parent = vindue
 Instance.new("UICorner").Parent = lukKnap
+AnimerKnap(lukKnap)
 
 
 -- === Tegn menuen ud fra seneste status + mine nuværende coins ===
