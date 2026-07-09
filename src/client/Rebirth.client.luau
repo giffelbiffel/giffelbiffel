@@ -13,6 +13,7 @@ local senesteStatus = nil   -- den seneste status serveren sendte
 -- Fælles tal-formatering (5000000 -> "5M")
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
+local RebirthConfig = require(ReplicatedStorage:WaitForChild("RebirthConfig"))
 
 -- === Skærm-lag ===
 local skaerm = Instance.new("ScreenGui")
@@ -55,6 +56,87 @@ aabnKnap.TextScaled = true
 aabnKnap.Parent = skaerm
 Instance.new("UICorner").Parent = aabnKnap
 AnimerKnap(aabnKnap)
+
+-- --- Progress-bar LIGE OVER rebirth-knappen (altid synlig) ---
+local barBoks = Instance.new("Frame")
+barBoks.AnchorPoint = Vector2.new(0, 1)
+barBoks.Position = UDim2.new(0, 20, 1, -70)       -- 6 px over REBIRTH-knappen
+barBoks.Size = UDim2.new(0, 150, 0, 40)
+barBoks.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
+barBoks.BackgroundTransparency = 0.3
+barBoks.Parent = skaerm
+Instance.new("UICorner").Parent = barBoks
+
+local barTekst = Instance.new("TextLabel")         -- "3.2M / 5M"
+barTekst.Size = UDim2.new(1, -8, 0, 18)
+barTekst.Position = UDim2.new(0, 4, 0, 2)
+barTekst.BackgroundTransparency = 1
+barTekst.Font = Enum.Font.GothamBold
+barTekst.TextScaled = true
+barTekst.TextColor3 = Color3.fromRGB(255, 255, 255)
+barTekst.Parent = barBoks
+
+local barBund = Instance.new("Frame")              -- den grå bund-bar
+barBund.Position = UDim2.new(0, 4, 0, 24)
+barBund.Size = UDim2.new(1, -8, 0, 10)
+barBund.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+barBund.Parent = barBoks
+Instance.new("UICorner").Parent = barBund
+
+local barFyld = Instance.new("Frame")              -- den grønne fyld-del
+barFyld.Size = UDim2.new(0, 0, 1, 0)               -- bredde sættes af opdaterBar
+barFyld.BackgroundColor3 = Color3.fromRGB(60, 220, 90)
+barFyld.Parent = barBund
+Instance.new("UICorner").Parent = barFyld
+
+-- Lille ✓/✗-status for fisker-kravet (ja/nej -- ikke en gradvis bar)
+local fiskerIkon = Instance.new("TextLabel")
+fiskerIkon.AnchorPoint = Vector2.new(0, 1)
+fiskerIkon.Position = UDim2.new(0, 176, 1, -70)    -- til højre for baren
+fiskerIkon.Size = UDim2.new(0, 40, 0, 40)
+fiskerIkon.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
+fiskerIkon.BackgroundTransparency = 0.3
+fiskerIkon.Font = Enum.Font.GothamBold
+fiskerIkon.TextScaled = true
+fiskerIkon.Visible = false
+fiskerIkon.Parent = skaerm
+Instance.new("UICorner").Parent = fiskerIkon
+
+local ejerAlleFiskereNu = false    -- opdateres fra serverens status
+
+local function opdaterBar()
+	local rebirths = spiller:GetAttribute("Rebirths") or 0
+	local niveau = RebirthConfig[rebirths + 1]     -- næste niveau (samme config som serveren)
+
+	if not niveau then                             -- max rebirth nået
+		barTekst.Text = "MAX"
+		barFyld.Size = UDim2.new(1, 0, 1, 0)
+		fiskerIkon.Visible = false
+		return
+	end
+
+	local coins = spiller:GetAttribute("Coins") or 0
+	local andel = math.min(coins / niveau.requiredCoins, 1)   -- cap ved 100%
+	barFyld.Size = UDim2.new(andel, 0, 1, 0)
+	barTekst.Text = FormatNumber(coins) .. " / " .. FormatNumber(niveau.requiredCoins)
+
+	if #niveau.requiredFishers > 0 then            -- kun hvis niveauet HAR et fisker-krav
+		fiskerIkon.Visible = true
+		if ejerAlleFiskereNu then
+			fiskerIkon.Text = "OK"
+			fiskerIkon.TextColor3 = Color3.fromRGB(60, 220, 90)   -- grøn: ejer alle
+		else
+			fiskerIkon.Text = "X"
+			fiskerIkon.TextColor3 = Color3.fromRGB(230, 60, 60)   -- rød: mangler nogen
+		end
+	else
+		fiskerIkon.Visible = false
+	end
+end
+
+opdaterBar()
+spiller:GetAttributeChangedSignal("Coins"):Connect(opdaterBar)      -- live mens man spiller
+spiller:GetAttributeChangedSignal("Rebirths"):Connect(opdaterBar)   -- nyt niveau = nyt krav
 
 -- --- Baggrund bag menuen (klik udenfor for at lukke) ---
 local baggrund = Instance.new("TextButton")
@@ -207,8 +289,13 @@ rebirthKnap.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Serveren sender status (ved åbning OG efter en rebirth)
+-- Serveren sender status (ved åbning, efter en rebirth og efter fisker-køb)
 rebirthEvent.OnClientEvent:Connect(function(status)
 	senesteStatus = status
+	ejerAlleFiskereNu = status.isMax or status.ownsAllFishers   -- til barens ✓/✗
 	tegnMenu()
+	opdaterBar()
 end)
+
+-- Bed om status med det samme, så barens ✓/✗ er korrekt fra start
+rebirthEvent:FireServer("status")

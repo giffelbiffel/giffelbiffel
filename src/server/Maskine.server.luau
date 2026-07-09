@@ -767,6 +767,15 @@ rebirthEvent.OnServerEvent:Connect(function(spiller, handling)
 	sendRebirthStatus(spiller)   -- send altid opdateret status tilbage
 end)
 
+-- Push også frisk status efter et fisker-køb, så progress-barens ✓/✗ følger med live.
+-- (Ekstra lytter -- rører ikke selve købs-handleren. task.defer = kør EFTER at
+--  købs-handleren har registreret ejerskabet.)
+buyFisher.OnServerEvent:Connect(function(spiller, kind)
+	if kind == "fisher" then
+		task.defer(sendRebirthStatus, spiller)
+	end
+end)
+
 -- === UPGRADE-KØB (sker på serveren) ===
 upgradeEvent.OnServerEvent:Connect(function(spiller, handling, fiskerNavn, sporNavn)
 	if handling == "buy" then
