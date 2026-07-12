@@ -25,6 +25,7 @@ local STIL = {
 local skaerm = Instance.new("ScreenGui")
 skaerm.Name = "CoinPopup"
 skaerm.ResetOnSpawn = false
+skaerm.DisplayOrder = 100     -- tegnes FORAN alle menuer (de andre lag har 0)
 skaerm.Parent = spiller:WaitForChild("PlayerGui")
 
 -- Lav ÉN popup med et beløb, på et tilfældigt sted i området
