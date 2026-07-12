@@ -42,6 +42,11 @@ local sellPopup = Instance.new("RemoteEvent")
 sellPopup.Name = "SellPopup"
 sellPopup.Parent = ReplicatedStorage
 
+-- Walkie-talkie til at sælge ÉN fisk ad gangen fra sælg-menuen
+local sellOne = Instance.new("RemoteEvent")
+sellOne.Name = "SellOne"
+sellOne.Parent = ReplicatedStorage
+
 
 -- === FANGST-EFFEKT (visuel -- nem at style om her) ===
 local FANGST_EFFEKT = {
@@ -661,11 +666,30 @@ sellAll.OnServerEvent:Connect(function(spiller)
 		local mult = spiller:GetAttribute("Multiplier") or 1   -- rebirth-multiplier
 		local tjent = math.floor(total * mult)                 -- gang oveni -- rør ikke grundværdien
 		spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjent)
-		sellPopup:FireClient(spiller, tjent)                   -- vis "+X" popup (ren visuel)
+		sellPopup:FireClient(spiller, tjent, 3)                -- Sælg Alt: op til 3 popups
 	end
 	playerFish[spiller] = {}                              -- beholdningen er tom nu
 	opdaterFiskAntal(spiller)
 	openSell:FireClient(spiller, lavSummary(spiller))    -- opdater menuen (nu tom)
+end)
+
+-- Client trykker "Sell" på ÉN fisk-gruppe -> sælg én enkelt fisk af den type
+sellOne.OnServerEvent:Connect(function(spiller, fiskNavn)
+	local fiskListe = playerFish[spiller] or {}
+	for i, def in fiskListe do
+		if def.name == fiskNavn then
+			table.remove(fiskListe, i)                          -- fjern netop den ene fisk
+			local mult = spiller:GetAttribute("Multiplier") or 1
+			local tjent = math.floor(def.value * mult)          -- samme multiplier som Sælg Alt
+			if tjent > 0 then
+				spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjent)
+				sellPopup:FireClient(spiller, tjent, 1)         -- enkelt-salg: præcis 1 popup
+			end
+			opdaterFiskAntal(spiller)
+			openSell:FireClient(spiller, lavSummary(spiller))   -- opdater menuen
+			return
+		end
+	end
 end)
 
 -- === REBIRTH ===

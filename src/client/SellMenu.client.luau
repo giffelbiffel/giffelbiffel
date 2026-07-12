@@ -10,6 +10,7 @@ local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
 local openSell = ReplicatedStorage:WaitForChild("OpenSellMenu")
 local sellAll = ReplicatedStorage:WaitForChild("SellAll")
+local sellOne = ReplicatedStorage:WaitForChild("SellOne")
 
 -- === Byg menuen (skjult fra start) ===
 local skaerm = Instance.new("ScreenGui")
@@ -92,7 +93,7 @@ AnimerKnap(lukKnap)
 local function visListe(summary)
 	-- ryd gamle rækker
 	for _, barn in liste:GetChildren() do
-		if barn:IsA("TextLabel") then
+		if barn.Name == "FiskRaekke" then
 			barn:Destroy()
 		end
 	end
@@ -113,6 +114,7 @@ local function visListe(summary)
 
 	if #summary == 0 then
 		local tom = Instance.new("TextLabel")
+		tom.Name = "FiskRaekke"
 		tom.Size = UDim2.new(1, 0, 0, 30)
 		tom.BackgroundTransparency = 1
 		tom.Text = "No fish to sell"
@@ -124,17 +126,41 @@ local function visListe(summary)
 	end
 
 	for i, gruppe in summary do
-		local raekke = Instance.new("TextLabel")
+		-- Rækken er nu en Frame: tekst til venstre + "Sell"-knap til højre
+		local raekke = Instance.new("Frame")
+		raekke.Name = "FiskRaekke"
 		raekke.LayoutOrder = i
-		raekke.Size = UDim2.new(1, 0, 0, 30)
+		raekke.Size = UDim2.new(1, 0, 0, 34)
 		raekke.BackgroundTransparency = 1
-		raekke.Font = Enum.Font.GothamMedium
-		raekke.TextScaled = true
-		raekke.TextXAlignment = Enum.TextXAlignment.Left
-		raekke.TextColor3 = FishConfig.colors[gruppe.rarity] or Color3.fromRGB(255, 255, 255)
-		raekke.Text = "x" .. FormatNumber(gruppe.count) .. "   " .. gruppe.name
-			.. "  [" .. gruppe.rarity .. "]   " .. FormatNumber(gruppe.value) .. "c each"
 		raekke.Parent = liste
+
+		local tekst = Instance.new("TextLabel")
+		tekst.Size = UDim2.new(1, -80, 1, 0)               -- gør plads til knappen
+		tekst.BackgroundTransparency = 1
+		tekst.Font = Enum.Font.GothamMedium
+		tekst.TextScaled = true
+		tekst.TextXAlignment = Enum.TextXAlignment.Left
+		tekst.TextColor3 = FishConfig.colors[gruppe.rarity] or Color3.fromRGB(255, 255, 255)
+		tekst.Text = "x" .. FormatNumber(gruppe.count) .. "   " .. gruppe.name
+			.. "  [" .. gruppe.rarity .. "]   " .. FormatNumber(gruppe.value) .. "c each"
+		tekst.Parent = raekke
+
+		-- Sælg ÉN fisk af denne type
+		local salgKnap = Instance.new("TextButton")
+		salgKnap.Size = UDim2.new(0, 70, 0, 28)
+		salgKnap.Position = UDim2.new(1, -74, 0.5, -14)    -- højre side, lodret centreret
+		salgKnap.BackgroundColor3 = Color3.fromRGB(60, 200, 90)
+		salgKnap.Text = "Sell"
+		salgKnap.TextColor3 = Color3.fromRGB(255, 255, 255)
+		salgKnap.Font = Enum.Font.GothamBold
+		salgKnap.TextScaled = true
+		salgKnap.Parent = raekke
+		Instance.new("UICorner").Parent = salgKnap
+		AnimerKnap(salgKnap)                               -- samme squish som alle andre knapper
+
+		salgKnap.MouseButton1Click:Connect(function()
+			sellOne:FireServer(gruppe.name)                -- sælg 1 stk af netop denne fisk
+		end)
 	end
 end
 
