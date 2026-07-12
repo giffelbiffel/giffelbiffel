@@ -62,12 +62,37 @@ local FANGST_EFFEKT = {
 	stoerrelse = 0.35,                          -- partikel-størrelse
 }
 
+-- === EKSTRA effekt ved SJÆLDNE fangster (Basic får ingen -- kun den normale) ===
+-- Eskalerer med sjældenhed. Farverne hentes fra FishConfig.colors (samme som sælg-menuen).
+local SJAELDEN_EFFEKT = {
+	Rare      = { antal = 10, levetid = 0.6, fart = 8,  stoerrelse = 0.4 },   -- lille blåt glimmer
+	Epic      = { antal = 18, levetid = 0.8, fart = 10, stoerrelse = 0.5 },   -- lilla burst
+	Legendary = { antal = 30, levetid = 1.2, fart = 12, stoerrelse = 0.65 },  -- gyldent lys, lidt længere
+}
+
 
 -- === Sjældenheds-system: fiskene fra FishConfig, oddsene fra hver fisker ===
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
 
 -- Bruges hvis en fisker i config'en IKKE har sin egen chances-tabel (så intet crasher)
 local DEFAULT_CHANCES = { Basic = 70, Rare = 20, Epic = 8, Legendary = 2 }
+
+-- Hvor sjælden er en sjældenhed? (plads i rarityOrder -- højere = sjældnere)
+local function rarityRang(rarity)
+	for i, r in FishConfig.rarityOrder do
+		if r == rarity then
+			return i
+		end
+	end
+	return 0
+end
+
+-- Returnér den sjældneste af to (bruges til at vælge tick'ets kraftigste effekt)
+local function bedsteRarity(a, b)
+	if not SJAELDEN_EFFEKT[b] then return a end     -- b har ingen ekstra effekt (Basic)
+	if not a then return b end
+	return rarityRang(b) > rarityRang(a) and b or a
+end
 
 -- Rul en sjældenhed ud fra en GIVEN chance-tabel (fx fiskerens egen)
 local function rollRarity(chances)
@@ -376,6 +401,22 @@ local function lavFisker(def, position, ejer)
 	effekt.Size = NumberSequence.new(FANGST_EFFEKT.stoerrelse)
 	effekt.Parent = fisker
 
+	-- Ekstra emitters til sjældne fangster: én per sjældenhed, farve fra FishConfig
+	-- (samme farver som sælg-menuen). Enabled=false -> fyres kun med :Emit().
+	local sjaeldenEmitters = {}
+	for rarity, indstilling in SJAELDEN_EFFEKT do
+		local e = Instance.new("ParticleEmitter")
+		e.Enabled = false
+		e.Color = ColorSequence.new(FishConfig.colors[rarity] or Color3.fromRGB(255, 255, 255))
+		e.Lifetime = NumberRange.new(indstilling.levetid)
+		e.Speed = NumberRange.new(indstilling.fart)
+		e.SpreadAngle = Vector2.new(180, 180)
+		e.Size = NumberSequence.new(indstilling.stoerrelse)
+		e.LightEmission = rarity == "Legendary" and 1 or 0.4   -- Legendary "gløder"
+		e.Parent = fisker
+		sjaeldenEmitters[rarity] = e
+	end
+
 	-- Effektive værdier = grundværdi fra config GANGET med ejerens upgrade-bonus.
 	-- Beregnes LIVE hver gang, så en ny upgrade virker med det samme på alle placerede.
 	local spor = FisherUpgradeConfig[def.name]
@@ -447,6 +488,7 @@ local function lavFisker(def, position, ejer)
 			if not fisker.Parent then break end   -- fiskeren er fjernet (fx ved rebirth) -> stop
 
 			local fangetNoget = false
+			local bedsteSjaelden = nil    -- tick'ets sjældneste fangst (Rare/Epic/Legendary)
 
 			for _ = 1, def.fishPerCatch do
 				-- rul en fisk med catchChance-justerede odds
@@ -460,6 +502,7 @@ local function lavFisker(def, position, ejer)
 						spand.part:SetAttribute("Indhold", #spand.list)
 						fangetNoget = true
 						statsTilfoejFangst(ejer, fisk)   -- livstids-tæller
+						bedsteSjaelden = bedsteRarity(bedsteSjaelden, fisk.rarity)
 					elseif #fisherList < effektivKapacitet() then
 						-- FØRST når ALLE spande er fulde: fiskeren beholder fisken selv
 						table.insert(fisherList, fisk)
@@ -467,13 +510,18 @@ local function lavFisker(def, position, ejer)
 						opdaterSkilt()
 						fangetNoget = true
 						statsTilfoejFangst(ejer, fisk)   -- livstids-tæller
+						bedsteSjaelden = bedsteRarity(bedsteSjaelden, fisk.rarity)
 					end
 					-- er alle spande OG fiskeren fulde: der fanges ikke mere (som før)
 				end
 			end
 
 			if fangetNoget then
-				effekt:Emit(FANGST_EFFEKT.antal)   -- kort partikel-burst ved fangst
+				effekt:Emit(FANGST_EFFEKT.antal)   -- kort partikel-burst ved fangst (uændret)
+			end
+			if bedsteSjaelden then
+				-- EKSTRA burst oveni ved sjælden fangst (Rare/Epic/Legendary)
+				sjaeldenEmitters[bedsteSjaelden]:Emit(SJAELDEN_EFFEKT[bedsteSjaelden].antal)
 			end
 		end
 	end)
