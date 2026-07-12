@@ -47,6 +47,11 @@ local sellOne = Instance.new("RemoteEvent")
 sellOne.Name = "SellOne"
 sellOne.Parent = ReplicatedStorage
 
+-- Walkie-talkie til settings + stats-menuen
+local statsEvent = Instance.new("RemoteEvent")
+statsEvent.Name = "Stats"
+statsEvent.Parent = ReplicatedStorage
+
 
 -- === FANGST-EFFEKT (visuel -- nem at style om her) ===
 local FANGST_EFFEKT = {
@@ -218,6 +223,48 @@ local function sendUpgradeStatus(spiller, fiskerNavn)
 end
 
 
+-- === LIVSTIDS-STATS (i hukommelsen for nu -- DataStore kommer senere) ===
+-- VIGTIGT: denne tabel er HELT ADSKILT fra spillerens aktive coins/fisk.
+-- Rebirth-rydningen rører den ALDRIG -- tallene stiger for evigt.
+local lifetimeStats = {}   -- spiller -> { coinsEarned, fishCaught, byRarity, joinTid, musikTil }
+
+-- +1 fangst (og +1 for fiskens sjældenhed) -- kaldes KUN når en fisk faktisk fanges
+local function statsTilfoejFangst(ejer, fisk)
+	local s = ejer and lifetimeStats[ejer]
+	if s then
+		s.fishCaught += 1
+		s.byRarity[fisk.rarity] = (s.byRarity[fisk.rarity] or 0) + 1
+	end
+end
+
+-- +coins tjent (kaldes ved salg -- livstids-total, adskilt fra saldoen)
+local function statsTilfoejCoins(spiller, beloeb)
+	local s = lifetimeStats[spiller]
+	if s then
+		s.coinsEarned += beloeb
+	end
+end
+
+-- Client beder om stats ("get") eller gemmer musik-tilstand ("music", true/false)
+statsEvent.OnServerEvent:Connect(function(spiller, handling, vaerdi)
+	local s = lifetimeStats[spiller]
+	if not s then return end
+
+	if handling == "music" then
+		s.musikTil = vaerdi and true or false   -- gemmes, klar til DataStore senere
+		return
+	end
+
+	statsEvent:FireClient(spiller, {
+		coinsEarned = s.coinsEarned,
+		fishCaught = s.fishCaught,
+		byRarity = s.byRarity,
+		playSeconds = os.time() - s.joinTid,    -- spilletid DENNE session
+		musikTil = s.musikTil,
+	})
+end)
+
+
 -- === OPSKRIFT: lav ét plot ===
 local function lavPlot(position)
 	local plot = Instance.new("Part")
@@ -265,6 +312,13 @@ local function spillerJoinede(spiller)
 	ownedFishers[spiller] = {}                     -- endnu ejet ingen fiskere
 	placedItems[spiller] = {}                      -- endnu placeret intet
 	upgradeLevels[spiller] = {}                    -- ingen upgrades endnu
+	lifetimeStats[spiller] = {                     -- livstids-stats (roeres ALDRIG af rebirth)
+		coinsEarned = 0,
+		fishCaught = 0,
+		byRarity = {},
+		joinTid = os.time(),
+		musikTil = true,
+	}
 	plot:SetAttribute("Owner", spiller.UserId)
 	plot.Skilt.Navn.Text = spiller.Name .. "'s plot"
 end
@@ -278,6 +332,7 @@ Players.PlayerRemoving:Connect(function(spiller)
 	ownedFishers[spiller] = nil
 	placedItems[spiller] = nil
 	upgradeLevels[spiller] = nil
+	lifetimeStats[spiller] = nil
 end)
 
 
@@ -404,12 +459,14 @@ local function lavFisker(def, position, ejer)
 						table.insert(spand.list, fisk)
 						spand.part:SetAttribute("Indhold", #spand.list)
 						fangetNoget = true
+						statsTilfoejFangst(ejer, fisk)   -- livstids-tæller
 					elseif #fisherList < effektivKapacitet() then
 						-- FØRST når ALLE spande er fulde: fiskeren beholder fisken selv
 						table.insert(fisherList, fisk)
 						fisker:SetAttribute("Indhold", #fisherList)
 						opdaterSkilt()
 						fangetNoget = true
+						statsTilfoejFangst(ejer, fisk)   -- livstids-tæller
 					end
 					-- er alle spande OG fiskeren fulde: der fanges ikke mere (som før)
 				end
@@ -666,6 +723,7 @@ sellAll.OnServerEvent:Connect(function(spiller)
 		local mult = spiller:GetAttribute("Multiplier") or 1   -- rebirth-multiplier
 		local tjent = math.floor(total * mult)                 -- gang oveni -- rør ikke grundværdien
 		spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjent)
+		statsTilfoejCoins(spiller, tjent)                      -- livstids-total
 		sellPopup:FireClient(spiller, tjent, 3)                -- Sælg Alt: op til 3 popups
 	end
 	playerFish[spiller] = {}                              -- beholdningen er tom nu
@@ -683,6 +741,7 @@ sellOne.OnServerEvent:Connect(function(spiller, fiskNavn)
 			local tjent = math.floor(def.value * mult)          -- samme multiplier som Sælg Alt
 			if tjent > 0 then
 				spiller:SetAttribute("Coins", (spiller:GetAttribute("Coins") or 0) + tjent)
+				statsTilfoejCoins(spiller, tjent)               -- livstids-total
 				sellPopup:FireClient(spiller, tjent, 1)         -- enkelt-salg: præcis 1 popup
 			end
 			opdaterFiskAntal(spiller)
