@@ -53,6 +53,40 @@ statsEvent.Name = "Stats"
 statsEvent.Parent = ReplicatedStorage
 
 
+-- === GLOBAL FANGST-BESKED (på tværs af ALLE servere via MessagingService) ===
+local MessagingService = game:GetService("MessagingService")
+local GLOBAL_TOPIC = "UltraRareCatch"
+local GLOBAL_TAERSKEL = 1 / 50000   -- 1/50.000 eller sjældnere (chance <= dette tal)
+
+-- server -> alle klienter: vis en besked i den indbyggede chat
+local globalCatch = Instance.new("RemoteEvent")
+globalCatch.Name = "GlobalCatch"
+globalCatch.Parent = ReplicatedStorage
+
+-- Send beskeden ud til ALLE kørende servere (ren visuel besked -- ingen logik)
+local function announceUltraRare(spillerNavn, fiskNavn, naevner)
+	local tekst = spillerNavn .. " caught a " .. fiskNavn .. "! (1/" .. FormatNumber(naevner) .. ")"
+	local ok, err = pcall(function()
+		MessagingService:PublishAsync(GLOBAL_TOPIC, tekst)
+	end)
+	if not ok then
+		warn("Global fangst-besked kunne ikke sendes: " .. tostring(err))
+	end
+end
+
+-- Lyt efter beskeder fra alle servere (også vores egen) -> vis i alles chat
+task.spawn(function()
+	local ok, err = pcall(function()
+		MessagingService:SubscribeAsync(GLOBAL_TOPIC, function(besked)
+			globalCatch:FireAllClients(besked.Data)
+		end)
+	end)
+	if not ok then
+		warn("Kunne ikke abonnere på globale fangst-beskeder: " .. tostring(err))
+	end
+end)
+
+
 -- === FANGST-EFFEKT (visuel -- nem at style om her) ===
 local FANGST_EFFEKT = {
 	antal = 6,                                  -- partikler per fangst
@@ -463,6 +497,14 @@ local function lavFisker(def, position, ejer)
 	-- Oversæt config'ens brøker til tal ÉN gang per fisker (fejl vises kun én gang)
 	local grundChances = normaliserChances(def.chances or DEFAULT_CHANCES)
 
+	-- Global besked hvis fangstens sjældenhed er 1/50.000 eller sjældnere
+	local function maaskeGlobalBesked(fisk)
+		local chance = grundChances[fisk.rarity]
+		if ejer and chance and chance > 0 and chance <= GLOBAL_TAERSKEL then
+			announceUltraRare(ejer.Name, fisk.name, math.floor(1 / chance + 0.5))
+		end
+	end
+
 	local function effektiveChances()
 		local pct = totalBonusPct(spor and spor.catchChance, ejer and getNiveauer(ejer, def.name).catchChance or 0)
 		return justeretChances(grundChances, pct)
@@ -535,6 +577,7 @@ local function lavFisker(def, position, ejer)
 						fangetNoget = true
 						statsTilfoejFangst(ejer, fisk)   -- livstids-tæller
 						bedsteSjaelden = bedsteRarity(bedsteSjaelden, fisk.rarity)
+						maaskeGlobalBesked(fisk)
 					elseif #fisherList < effektivKapacitet() then
 						-- FØRST når ALLE spande er fulde: fiskeren beholder fisken selv
 						table.insert(fisherList, fisk)
@@ -543,6 +586,7 @@ local function lavFisker(def, position, ejer)
 						fangetNoget = true
 						statsTilfoejFangst(ejer, fisk)   -- livstids-tæller
 						bedsteSjaelden = bedsteRarity(bedsteSjaelden, fisk.rarity)
+						maaskeGlobalBesked(fisk)
 					end
 					-- er alle spande OG fiskeren fulde: der fanges ikke mere (som før)
 				end
