@@ -75,7 +75,36 @@ local SJAELDEN_EFFEKT = {
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
 
 -- Bruges hvis en fisker i config'en IKKE har sin egen chances-tabel (så intet crasher)
-local DEFAULT_CHANCES = { Basic = 70, Rare = 20, Epic = 8, Legendary = 2 }
+local DEFAULT_CHANCES = { Basic = "7/10", Rare = "1/5", Epic = "2/25", Legendary = "1/50" }
+
+-- Læs én chance-værdi fra config: en brøk-streng som "1/1000" (eller et rent tal).
+-- Kan den ikke læses, advarer vi i Output og bruger 0 -- spillet crasher aldrig.
+local function parseChance(vaerdi, rarity)
+	if typeof(vaerdi) == "number" then
+		return vaerdi                                  -- rå tal virker stadig
+	end
+	if typeof(vaerdi) == "string" then
+		local a, b = string.match(vaerdi, "^%s*(%d+%.?%d*)%s*/%s*(%d+%.?%d*)%s*$")
+		if a and b then
+			local naevner = tonumber(b)
+			if naevner and naevner > 0 then
+				return tonumber(a) / naevner           -- "1/1000" -> 0.001
+			end
+		end
+	end
+	warn("FisherConfig: kunne ikke læse chancen '" .. tostring(vaerdi)
+		.. "' for '" .. tostring(rarity) .. "' -- skriv en brøk som \"1/100\". Bruger 0.")
+	return 0
+end
+
+-- Oversæt en hel chances-tabel (brøk-strenge) til rene tal, som rulningen bruger
+local function normaliserChances(chances)
+	local ud = {}
+	for rarity, vaerdi in chances do
+		ud[rarity] = parseChance(vaerdi, rarity)
+	end
+	return ud
+end
 
 -- Hvor sjælden er en sjældenhed? (plads i rarityOrder -- højere = sjældnere)
 local function rarityRang(rarity)
@@ -431,9 +460,12 @@ local function lavFisker(def, position, ejer)
 		return math.floor(def.capacity * (1 + pct / 100))
 	end
 
+	-- Oversæt config'ens brøker til tal ÉN gang per fisker (fejl vises kun én gang)
+	local grundChances = normaliserChances(def.chances or DEFAULT_CHANCES)
+
 	local function effektiveChances()
 		local pct = totalBonusPct(spor and spor.catchChance, ejer and getNiveauer(ejer, def.name).catchChance or 0)
-		return justeretChances(def.chances or DEFAULT_CHANCES, pct)
+		return justeretChances(grundChances, pct)
 	end
 
 	-- Klik på fiskeren -> åbn upgrade-menuen for dens TYPE (hos den der klikkede)
