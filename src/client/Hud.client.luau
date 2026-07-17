@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local spiller = Players.LocalPlayer            -- "mig" på min egen skærm
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
+local Responsive = require(ReplicatedStorage:WaitForChild("Responsive"))
 
 -- 1. Lav selve skærm-laget, som teksten skal ligge på
 local skaerm = Instance.new("ScreenGui")
@@ -28,6 +29,8 @@ boks.Parent = skaerm
 local hjoerne = Instance.new("UICorner")
 hjoerne.CornerRadius = UDim.new(0, 12)
 hjoerne.Parent = boks
+
+Responsive(boks)   -- skalér HUD-boksen på små skærme
 
 -- 3. Opskrift: skriv mine coins og fisk i boksen (to linjer)
 local function opdaterHud()

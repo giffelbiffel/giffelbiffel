@@ -10,6 +10,7 @@ local mus = spiller:GetMouse()
 local FisherConfig = require(ReplicatedStorage:WaitForChild("FisherConfig"))
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
+local Responsive = require(ReplicatedStorage:WaitForChild("Responsive"))
 
 local buyFisher = ReplicatedStorage:WaitForChild("BuyFisher")
 local placeFisher = ReplicatedStorage:WaitForChild("PlaceFisher")
@@ -31,6 +32,7 @@ vindue.BackgroundColor3 = Color3.fromRGB(25, 35, 55)
 vindue.Visible = false
 vindue.Parent = skaerm
 Instance.new("UICorner").Parent = vindue
+Responsive(vindue)   -- skalér hele shop-menuen på små skærme
 
 -- Stabler indholdet pænt lodret
 local layout = Instance.new("UIListLayout")

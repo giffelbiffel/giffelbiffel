@@ -8,6 +8,7 @@ local spiller = Players.LocalPlayer
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
+local Responsive = require(ReplicatedStorage:WaitForChild("Responsive"))
 local openSell = ReplicatedStorage:WaitForChild("OpenSellMenu")
 local sellAll = ReplicatedStorage:WaitForChild("SellAll")
 local sellOne = ReplicatedStorage:WaitForChild("SellOne")
@@ -26,6 +27,7 @@ vindue.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 vindue.Visible = false
 vindue.Parent = skaerm
 Instance.new("UICorner").Parent = vindue
+Responsive(vindue)   -- skalér hele sælg-menuen på små skærme
 
 -- Titel
 local titel = Instance.new("TextLabel")

@@ -14,6 +14,7 @@ local senesteStatus = nil   -- den seneste status serveren sendte
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
 local RebirthConfig = require(ReplicatedStorage:WaitForChild("RebirthConfig"))
+local Responsive = require(ReplicatedStorage:WaitForChild("Responsive"))
 
 -- === Skærm-lag ===
 local skaerm = Instance.new("ScreenGui")
@@ -31,6 +32,7 @@ hud.TextColor3 = Color3.fromRGB(255, 220, 120)
 hud.Font = Enum.Font.GothamBold
 hud.TextScaled = true
 hud.Parent = skaerm
+Responsive(hud)   -- skalér rebirth-HUD-linjen på små skærme
 Instance.new("UICorner").Parent = hud
 
 local function opdaterHud()
@@ -66,6 +68,7 @@ barBoks.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
 barBoks.BackgroundTransparency = 0.3
 barBoks.Parent = skaerm
 Instance.new("UICorner").Parent = barBoks
+Responsive(barBoks)   -- skalér progress-baren på små skærme
 
 local barTekst = Instance.new("TextLabel")         -- "3.2M / 5M"
 barTekst.Size = UDim2.new(1, -8, 0, 18)
@@ -101,6 +104,7 @@ fiskerIkon.TextScaled = true
 fiskerIkon.Visible = false
 fiskerIkon.Parent = skaerm
 Instance.new("UICorner").Parent = fiskerIkon
+Responsive(fiskerIkon)   -- skalér fisker-krav-ikonet på små skærme
 
 local ejerAlleFiskereNu = false    -- opdateres fra serverens status
 
@@ -158,6 +162,7 @@ vindue.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 vindue.Visible = false
 vindue.Parent = skaerm
 Instance.new("UICorner").Parent = vindue
+Responsive(vindue)   -- skalér hele rebirth-menuen på små skærme
 
 local titel = Instance.new("TextLabel")
 titel.Size = UDim2.new(1, -20, 0, 36)

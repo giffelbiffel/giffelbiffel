@@ -9,6 +9,7 @@ local SoundService = game:GetService("SoundService")
 local spiller = Players.LocalPlayer
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
+local Responsive = require(ReplicatedStorage:WaitForChild("Responsive"))
 local FishConfig = require(ReplicatedStorage:WaitForChild("FishConfig"))
 local statsEvent = ReplicatedStorage:WaitForChild("Stats")
 
@@ -58,6 +59,7 @@ vindue.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 vindue.Visible = false
 vindue.Parent = skaerm
 Instance.new("UICorner").Parent = vindue
+Responsive(vindue)   -- skalér hele settings-menuen på små skærme
 
 local layout = Instance.new("UIListLayout")
 layout.Padding = UDim.new(0, 6)

@@ -9,6 +9,7 @@ local spiller = Players.LocalPlayer
 local upgradeEvent = ReplicatedStorage:WaitForChild("Upgrade")
 local FormatNumber = require(ReplicatedStorage:WaitForChild("FormatNumber"))
 local AnimerKnap = require(ReplicatedStorage:WaitForChild("ButtonAnimation"))
+local Responsive = require(ReplicatedStorage:WaitForChild("Responsive"))
 
 local senesteStatus = nil
 
@@ -34,6 +35,7 @@ vindue.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 vindue.Visible = false
 vindue.Parent = skaerm
 Instance.new("UICorner").Parent = vindue
+Responsive(vindue)   -- skalér hele upgrade-menuen på små skærme
 
 local layout = Instance.new("UIListLayout")
 layout.Padding = UDim.new(0, 8)
