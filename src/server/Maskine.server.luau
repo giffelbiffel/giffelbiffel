@@ -1026,9 +1026,34 @@ local function standardData()
 		rebirths = 0,
 		multiplier = 1,
 		upgrades = {},
+		backpack = {},   -- uplacerede tools i hotbaren (fiskere + spande)
 		lifetime = { coinsEarned = 0, fishCaught = 0, byRarity = {} },
 		settings = { music = true },
 	}
+end
+
+-- Genskab ét uplaceret tool i backpacken ud fra en gemt post (samme slags Tool
+-- som købet laver). Client-lytteren kobler selv Activated på via Backpack.ChildAdded.
+local function genskabTool(backpack, entry)
+	local tool = Instance.new("Tool")
+	tool.RequiresHandle = false
+	tool.CanBeDropped = false
+	tool.ToolTip = "Click on your plot to place"
+	tool:SetAttribute("Robux", entry.robux and true or false)
+
+	if entry.kind == "bucket" then
+		tool.Name = FisherConfig.bucket.name
+		tool:SetAttribute("IsBucket", true)
+	elseif entry.kind == "fisher" then
+		local def = FisherConfig.fishers[entry.index]
+		if not def then return end          -- ukendt index (config ændret) -> spring over
+		tool.Name = def.name
+		tool:SetAttribute("FisherIndex", entry.index)
+	else
+		return
+	end
+
+	tool.Parent = backpack
 end
 
 -- Saml spillerens NUVÆRENDE tilstand til en gemme-tabel (kun rene tal/tekst -- DataStore-venligt)
@@ -1064,6 +1089,28 @@ local function serialize(spiller)
 			capacity = spor.capacity or 0,
 			catchChance = spor.catchChance or 0,
 		}
+	end
+
+	-- Uplacerede tools i backpacken/hånden (købt men ikke placeret endnu)
+	for _, sted in { spiller:FindFirstChildOfClass("Backpack"), spiller.Character } do
+		if sted then
+			for _, ting in sted:GetChildren() do
+				if ting:IsA("Tool") then
+					if ting:GetAttribute("FisherIndex") then
+						table.insert(data.backpack, {
+							kind = "fisher",
+							index = ting:GetAttribute("FisherIndex"),
+							robux = ting:GetAttribute("Robux") and true or false,
+						})
+					elseif ting:GetAttribute("IsBucket") then
+						table.insert(data.backpack, {
+							kind = "bucket",
+							robux = ting:GetAttribute("Robux") and true or false,
+						})
+					end
+				end
+			end
+		end
 	end
 
 	local s = lifetimeStats[spiller]
@@ -1136,6 +1183,18 @@ local function anvendData(spiller, data)
 				table.insert(placedItems[spiller], { part = part, robux = p.robux, kind = "fisher", name = p.name })
 			end
 		end
+	end
+
+	-- Genskab UPLACEREDE tools i backpacken (fallback til tom hvis feltet mangler)
+	local backpackListe = data.backpack or {}
+	if #backpackListe > 0 then
+		task.spawn(function()
+			local backpack = spiller:WaitForChild("Backpack", 15)   -- venter på spawn
+			if not backpack then return end
+			for _, entry in backpackListe do
+				genskabTool(backpack, entry)
+			end
+		end)
 	end
 end
 
