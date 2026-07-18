@@ -1035,6 +1035,7 @@ end
 -- Genskab ét uplaceret tool i backpacken ud fra en gemt post (samme slags Tool
 -- som købet laver). Client-lytteren kobler selv Activated på via Backpack.ChildAdded.
 local function genskabTool(backpack, entry)
+	print("[BP-DEBUG] genskabTool: kind=", entry.kind, "index=", entry.index, "robux=", entry.robux)
 	local tool = Instance.new("Tool")
 	tool.RequiresHandle = false
 	tool.CanBeDropped = false
@@ -1050,10 +1051,12 @@ local function genskabTool(backpack, entry)
 		tool.Name = def.name
 		tool:SetAttribute("FisherIndex", entry.index)
 	else
+		print("[BP-DEBUG]   -> ukendt kind, springer over")
 		return
 	end
 
 	tool.Parent = backpack
+	print("[BP-DEBUG]   -> tool oprettet:", tool.Name, "i", backpack:GetFullName())
 end
 
 -- Saml spillerens NUVÆRENDE tilstand til en gemme-tabel (kun rene tal/tekst -- DataStore-venligt)
@@ -1113,6 +1116,11 @@ local function serialize(spiller)
 		end
 	end
 
+	print("[BP-DEBUG] serialize:", spiller.Name, "-- fandt", #data.backpack, "uplacerede backpack-tools")
+	for i, e in data.backpack do
+		print("[BP-DEBUG]   gemmer post", i, "kind=", e.kind, "index=", e.index)
+	end
+
 	local s = lifetimeStats[spiller]
 	if s then
 		data.lifetime.coinsEarned = s.coinsEarned
@@ -1129,6 +1137,8 @@ end
 -- Anvend gemt data på spillerens tilstand. Hvert felt læses MED fallback,
 -- så gamle saves uden et nyt felt bare får standardværdien (ingen crash, intet tab).
 local function anvendData(spiller, data)
+	print("[BP-DEBUG] anvendData START for", spiller.Name,
+		"-- data.backpack:", data.backpack and #data.backpack or "nil/mangler")
 	spiller:SetAttribute("Coins", data.coins or STARTKAPITAL)
 	spiller:SetAttribute("Rebirths", data.rebirths or 0)
 	spiller:SetAttribute("Multiplier", data.multiplier or 1)
@@ -1187,9 +1197,11 @@ local function anvendData(spiller, data)
 
 	-- Genskab UPLACEREDE tools i backpacken (fallback til tom hvis feltet mangler)
 	local backpackListe = data.backpack or {}
+	print("[BP-DEBUG] anvendData: backpackListe har", #backpackListe, "poster at genskabe")
 	if #backpackListe > 0 then
 		task.spawn(function()
 			local backpack = spiller:WaitForChild("Backpack", 15)   -- venter på spawn
+			print("[BP-DEBUG] genskab-tråd: Backpack fundet =", backpack ~= nil)
 			if not backpack then return end
 			for _, entry in backpackListe do
 				genskabTool(backpack, entry)
@@ -1203,6 +1215,8 @@ local function haandterJoin(spiller)
 	spillerJoinede(spiller)   -- standard + tildel plot, så alt findes med det samme
 
 	local ok, gemt = DataStore.load(spiller.UserId)
+	print("[BP-DEBUG] haandterJoin:", spiller.Name, "load ok=", ok, "gemt findes=", gemt ~= nil,
+		"backpack i gemt=", (gemt and gemt.backpack) and #gemt.backpack or "nil")
 	if not spiller.Parent then return end   -- spilleren forlod under hentningen
 
 	if not ok then
@@ -1228,8 +1242,15 @@ end
 
 -- GEM en spiller (med alle sikkerhedstjek)
 local function gemSpiller(spiller)
-	if dontSave[spiller] then return end        -- hent fejlede -> overskriv aldrig
-	if not dataLoaded[spiller] then return end  -- data nåede ikke at blive hentet -> gem ikke
+	if dontSave[spiller] then
+		print("[BP-DEBUG] gemSpiller SPRINGER OVER (dontSave) for", spiller.Name)
+		return
+	end
+	if not dataLoaded[spiller] then
+		print("[BP-DEBUG] gemSpiller SPRINGER OVER (data ikke hentet) for", spiller.Name)
+		return
+	end
+	print("[BP-DEBUG] gemSpiller GEMMER for", spiller.Name)
 	DataStore.save(spiller.UserId, serialize(spiller))
 end
 
