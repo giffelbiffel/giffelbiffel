@@ -411,17 +411,9 @@ local function spillerJoinede(spiller)
 	plot.Skilt.Navn.Text = spiller.Name .. "'s plot"
 end
 
-for _, spiller in Players:GetPlayers() do        -- dem der allerede er her (Play Solo)
-	spillerJoinede(spiller)
-end
-Players.PlayerAdded:Connect(spillerJoinede)      -- og alle der joiner senere
-Players.PlayerRemoving:Connect(function(spiller)
-	playerFish[spiller] = nil                    -- ryd op når spilleren forlader
-	ownedFishers[spiller] = nil
-	placedItems[spiller] = nil
-	upgradeLevels[spiller] = nil
-	lifetimeStats[spiller] = nil
-end)
+-- (Join/leave håndteres i DATASTORE-sektionen nederst -- spilleren får standard-
+--  værdier via spillerJoinede() og får derefter sin GEMTE fremgang lagt ovenpå.
+--  Det gøres til sidst, så load/apply kan genskabe placerede fiskere/spande.)
 
 
 -- Plottets spande (auto-collector), i den rækkefølge de blev placeret.
@@ -796,9 +788,12 @@ placeFisher.OnServerEvent:Connect(function(spiller, klikPosition, tool)
 			-- PRÆCIS samme placeringsregler som før (løft 2 op, ingen andre regler)
 			local placering = Vector3.new(klikPosition.X, klikPosition.Y + 2, klikPosition.Z)
 			local part = lavFisker(def, placering, spiller)   -- ejer = til upgrade-bonusser
-			-- REBIRTH: husk denne placering (robux-flag følger tool'et)
+			-- REBIRTH + DATASTORE: husk placeringen med type/navn (robux-flag følger tool'et)
 			if placedItems[spiller] then
-				table.insert(placedItems[spiller], { part = part, robux = tool:GetAttribute("Robux") or false })
+				table.insert(placedItems[spiller], {
+					part = part, robux = tool:GetAttribute("Robux") or false,
+					kind = "fisher", name = def.name,
+				})
 			end
 			tool:Destroy()   -- fjern tool'et fra hotbaren efter placering
 		end
@@ -807,7 +802,10 @@ placeFisher.OnServerEvent:Connect(function(spiller, klikPosition, tool)
 		local placering = Vector3.new(klikPosition.X, klikPosition.Y + 3, klikPosition.Z)
 		local part = lavBucket(placering)
 		if placedItems[spiller] then
-			table.insert(placedItems[spiller], { part = part, robux = tool:GetAttribute("Robux") or false })
+			table.insert(placedItems[spiller], {
+				part = part, robux = tool:GetAttribute("Robux") or false,
+				kind = "bucket",
+			})
 		end
 		tool:Destroy()
 	end
@@ -1005,4 +1003,211 @@ upgradeEvent.OnServerEvent:Connect(function(spiller, handling, fiskerNavn, sporN
 	sendUpgradeStatus(spiller, fiskerNavn)   -- send altid frisk status (menuen opdaterer sig)
 end)
 
-print("Fiskeri-tycoon klar (sjældenhed + sælg-menu + rebirth + upgrades).")
+-- ============================================================
+-- === DATASTORE: gem og hent spillerens fremgang =============
+-- ============================================================
+local ServerScriptService = game:GetService("ServerScriptService")
+local DataStore = require(ServerScriptService:WaitForChild("DataStore"))
+
+local DATA_VERSION = 1        -- bump hvis et felts BETYDNING ændres (til migrering senere)
+local AUTOSAVE_SEK = 240      -- gem hver 4. minut
+
+local dataLoaded = {}         -- spiller -> true når data er hentet SIKKERT (må gemmes)
+local dontSave = {}           -- spiller -> true hvis hent FEJLEDE (gem ALDRIG => beskyt data)
+
+-- Standard-data for en helt ny spiller (også "skabelonen" nye felter tilføjes i)
+local function standardData()
+	return {
+		version = DATA_VERSION,
+		coins = STARTKAPITAL,
+		fish = {},
+		owned = {},
+		placed = {},
+		rebirths = 0,
+		multiplier = 1,
+		upgrades = {},
+		lifetime = { coinsEarned = 0, fishCaught = 0, byRarity = {} },
+		settings = { music = true },
+	}
+end
+
+-- Saml spillerens NUVÆRENDE tilstand til en gemme-tabel (kun rene tal/tekst -- DataStore-venligt)
+local function serialize(spiller)
+	local data = standardData()
+	data.coins = spiller:GetAttribute("Coins") or STARTKAPITAL
+	data.rebirths = spiller:GetAttribute("Rebirths") or 0
+	data.multiplier = spiller:GetAttribute("Multiplier") or 1
+
+	for _, f in playerFish[spiller] or {} do
+		table.insert(data.fish, { name = f.name, rarity = f.rarity, value = f.value })
+	end
+
+	for navn in ownedFishers[spiller] or {} do
+		table.insert(data.owned, navn)
+	end
+
+	for _, post in placedItems[spiller] or {} do
+		local part = post.part
+		if part and part.Parent then          -- gem kun ting der stadig står på plottet
+			table.insert(data.placed, {
+				kind = post.kind,
+				name = post.name,             -- kun for fiskere
+				x = part.Position.X, y = part.Position.Y, z = part.Position.Z,
+				robux = post.robux and true or false,
+			})
+		end
+	end
+
+	for navn, spor in upgradeLevels[spiller] or {} do
+		data.upgrades[navn] = {
+			speed = spor.speed or 0,
+			capacity = spor.capacity or 0,
+			catchChance = spor.catchChance or 0,
+		}
+	end
+
+	local s = lifetimeStats[spiller]
+	if s then
+		data.lifetime.coinsEarned = s.coinsEarned
+		data.lifetime.fishCaught = s.fishCaught
+		for rarity, antal in s.byRarity do
+			data.lifetime.byRarity[rarity] = antal
+		end
+		data.settings.music = s.musikTil and true or false
+	end
+
+	return data
+end
+
+-- Anvend gemt data på spillerens tilstand. Hvert felt læses MED fallback,
+-- så gamle saves uden et nyt felt bare får standardværdien (ingen crash, intet tab).
+local function anvendData(spiller, data)
+	spiller:SetAttribute("Coins", data.coins or STARTKAPITAL)
+	spiller:SetAttribute("Rebirths", data.rebirths or 0)
+	spiller:SetAttribute("Multiplier", data.multiplier or 1)
+
+	playerFish[spiller] = {}
+	for _, f in data.fish or {} do
+		table.insert(playerFish[spiller], { name = f.name, rarity = f.rarity, value = f.value })
+	end
+	opdaterFiskAntal(spiller)
+
+	ownedFishers[spiller] = {}
+	for _, navn in data.owned or {} do
+		ownedFishers[spiller][navn] = true
+	end
+
+	upgradeLevels[spiller] = {}
+	for navn, spor in data.upgrades or {} do
+		upgradeLevels[spiller][navn] = {
+			speed = spor.speed or 0,
+			capacity = spor.capacity or 0,
+			catchChance = spor.catchChance or 0,
+		}
+	end
+
+	lifetimeStats[spiller] = {
+		coinsEarned = (data.lifetime and data.lifetime.coinsEarned) or 0,
+		fishCaught = (data.lifetime and data.lifetime.fishCaught) or 0,
+		byRarity = {},
+		joinTid = os.time(),
+		musikTil = not (data.settings and data.settings.music == false),   -- default true
+	}
+	if data.lifetime and data.lifetime.byRarity then
+		for rarity, antal in data.lifetime.byRarity do
+			lifetimeStats[spiller].byRarity[rarity] = antal
+		end
+	end
+
+	-- Genskab placerede fiskere/spande på plottet
+	placedItems[spiller] = {}
+	for _, p in data.placed or {} do
+		local pos = Vector3.new(p.x or 0, p.y or 0, p.z or 0)
+		if p.kind == "bucket" then
+			local part = lavBucket(pos)
+			table.insert(placedItems[spiller], { part = part, robux = p.robux, kind = "bucket" })
+		elseif p.kind == "fisher" then
+			local def                                     -- find fisker-typen ud fra navnet
+			for _, d in FisherConfig.fishers do
+				if d.name == p.name then def = d break end
+			end
+			if def then                                   -- ukendt navn (fjernet fra config?) -> spring over
+				local part = lavFisker(def, pos, spiller)
+				table.insert(placedItems[spiller], { part = part, robux = p.robux, kind = "fisher", name = p.name })
+			end
+		end
+	end
+end
+
+-- HENT ved join: standardværdier først, derefter gemt fremgang ovenpå
+local function haandterJoin(spiller)
+	spillerJoinede(spiller)   -- standard + tildel plot, så alt findes med det samme
+
+	local ok, gemt = DataStore.load(spiller.UserId)
+	if not spiller.Parent then return end   -- spilleren forlod under hentningen
+
+	if not ok then
+		-- DataStore FEJLEDE -> vi ved IKKE hvad spilleren ejer. Gem ALDRIG denne
+		-- session, så vi ikke overskriver god data med standardværdier.
+		dontSave[spiller] = true
+		warn("[Data] Kunne ikke hente data for " .. spiller.Name
+			.. " -- gemning slået fra denne session for at BESKYTTE eksisterende data.")
+		return
+	end
+
+	if gemt then
+		local okApply = pcall(anvendData, spiller, gemt)
+		if not okApply then
+			dontSave[spiller] = true          -- uventet/korrupt data -> behold standard, gem ikke
+			warn("[Data] Gemt data for " .. spiller.Name .. " kunne ikke læses -- gemning slået fra.")
+			return
+		end
+	end
+	-- ny spiller (gemt == nil) beholder bare standardværdierne
+	dataLoaded[spiller] = true
+end
+
+-- GEM en spiller (med alle sikkerhedstjek)
+local function gemSpiller(spiller)
+	if dontSave[spiller] then return end        -- hent fejlede -> overskriv aldrig
+	if not dataLoaded[spiller] then return end  -- data nåede ikke at blive hentet -> gem ikke
+	DataStore.save(spiller.UserId, serialize(spiller))
+end
+
+-- Ryd hukommelse op når spilleren forlader (og GEM først)
+local function haandterLeave(spiller)
+	gemSpiller(spiller)
+	playerFish[spiller] = nil
+	ownedFishers[spiller] = nil
+	placedItems[spiller] = nil
+	upgradeLevels[spiller] = nil
+	lifetimeStats[spiller] = nil
+	dataLoaded[spiller] = nil
+	dontSave[spiller] = nil
+end
+
+for _, spiller in Players:GetPlayers() do   -- dem der allerede er her (Play Solo)
+	task.spawn(haandterJoin, spiller)
+end
+Players.PlayerAdded:Connect(haandterJoin)
+Players.PlayerRemoving:Connect(haandterLeave)
+
+-- AUTO-GEM: hver 4. minut, spredt ud så vi ikke rammer DataStore rate-limits
+task.spawn(function()
+	while true do
+		task.wait(AUTOSAVE_SEK)
+		for _, spiller in Players:GetPlayers() do
+			gemSpiller(spiller)
+			task.wait(1)                     -- lille pause mellem spillere (rate-limit venligt)
+		end
+	end
+end)
+
+-- Server lukker/genstarter: gem ALLE tilbageværende spillere før nedlukning
+game:BindToClose(function()
+	for _, spiller in Players:GetPlayers() do
+		gemSpiller(spiller)                  -- kører sekventielt -> DataStore når at fuldføre
+	end
+end)
+
+print("Fiskeri-tycoon klar (sjældenhed + sælg-menu + rebirth + upgrades + DataStore).")
