@@ -1200,8 +1200,15 @@ local function anvendData(spiller, data)
 	print("[BP-DEBUG] anvendData: backpackListe har", #backpackListe, "poster at genskabe")
 	if #backpackListe > 0 then
 		task.spawn(function()
-			local backpack = spiller:WaitForChild("Backpack", 15)   -- venter på spawn
-			print("[BP-DEBUG] genskab-tråd: Backpack fundet =", backpack ~= nil)
+			-- ÅRSAG TIL FEJLEN: Robloxs egen spawn-proces laver en FRISK Backpack og
+			-- rydder den, når Character spawner. Vi tilføjede tools FØR det skete, så de
+			-- blev wiped. FIX: vent til Character er fuldt spawnet, hent så den ENDELIGE
+			-- Backpack, og læg først tools i der.
+			local character = spiller.Character or spiller.CharacterAdded:Wait()
+			character:WaitForChild("Humanoid")
+			task.wait(1)   -- lad Robloxs spawn-backpack-opsætning blive helt færdig
+			local backpack = spiller:FindFirstChildOfClass("Backpack")
+			print("[BP-DEBUG] genskab EFTER fuld spawn: Backpack fundet =", backpack ~= nil)
 			if not backpack then return end
 			for _, entry in backpackListe do
 				genskabTool(backpack, entry)
