@@ -19,6 +19,10 @@
 return {
 	fishToCoins = 1,   -- 1 fisk = 1 coin (juster denne for at ændre hele økonomien)
 
+	-- Offline-indtjening: fiskere "fanger" videre mens man er logget af, men langsommere.
+	-- 0.35 = 35% af normal hastighed. Juster mellem fx 0.25 og 0.5.
+	offlineRate = 0.35,
+
 	-- Spanden (auto-collector): fiskerne sender deres fisk hertil.
 	bucket = {
 		name = "Bucket",

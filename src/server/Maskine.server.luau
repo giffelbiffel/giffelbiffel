@@ -594,7 +594,27 @@ local function lavFisker(def, position, ejer)
 		end
 	end)
 
-	return fisker
+	-- OFFLINE-INDTJENING: et lille interface, så load-simuleringen kan genbruge
+	-- DENNE fiskers egne regler (rate, chance-tabel, kapacitet) uden at røre online-løkken.
+	local offline = {
+		ventetid = effektivVentetid,          -- funktion: fiskerens effektive ventetid
+		fishPerCatch = def.fishPerCatch,
+		kapacitet = effektivKapacitet,        -- funktion: fiskerens effektive kapacitet
+		rul = function()
+			return rollFish(effektiveChances())   -- samme rul som online
+		end,
+		laegISelv = function(fisk)                -- læg i fiskerens egen liste hvis plads
+			if #fisherList < effektivKapacitet() then
+				table.insert(fisherList, fisk)
+				fisker:SetAttribute("Indhold", #fisherList)
+				opdaterSkilt()
+				return true
+			end
+			return false
+		end,
+	}
+
+	return fisker, offline
 end
 
 
@@ -1029,6 +1049,7 @@ local function standardData()
 		backpack = {},   -- uplacerede tools i hotbaren (fiskere + spande)
 		lifetime = { coinsEarned = 0, fishCaught = 0, byRarity = {} },
 		settings = { music = true },
+		lastLogout = 0,  -- server-tid ved sidste gem (til offline-indtjening)
 	}
 end
 
@@ -1123,6 +1144,8 @@ local function serialize(spiller)
 		data.settings.music = s.musikTil and true or false
 	end
 
+	data.lastLogout = os.time()   -- gem NUVÆRENDE server-tid (til offline-beregning ved næste join)
+
 	return data
 end
 
@@ -1179,8 +1202,8 @@ local function anvendData(spiller, data)
 				if d.name == p.name then def = d break end
 			end
 			if def then                                   -- ukendt navn (fjernet fra config?) -> spring over
-				local part = lavFisker(def, pos, spiller)
-				table.insert(placedItems[spiller], { part = part, robux = p.robux, kind = "fisher", name = p.name })
+				local part, offline = lavFisker(def, pos, spiller)
+				table.insert(placedItems[spiller], { part = part, robux = p.robux, kind = "fisher", name = p.name, offline = offline })
 			end
 		end
 	end
@@ -1202,6 +1225,55 @@ local function anvendData(spiller, data)
 				genskabTool(backpack, entry)
 			end
 		end)
+	end
+end
+
+-- OFFLINE-INDTJENING: simulér fangst for tiden siden logout, med reduceret hastighed.
+-- Bruger SAMME regler som online (per-fisker chance-tabel, sjældenhed, upgrades) og
+-- SAMME spand-rækkefølge. Stopper naturligt når alt er fyldt til kapacitets-loftet.
+local function simulerOffline(spiller, elapsedSek)
+	if elapsedSek <= 0 then return end
+	local rate = FisherConfig.offlineRate or 0.35
+	local produktivTid = elapsedSek * rate      -- "fange-tid" offline = forløbet tid * rate
+	if produktivTid <= 0 then return end
+
+	-- Samlet ledig kapacitet = ØVRE grænse. Sikrer at simuleringen ALTID stopper ved
+	-- loftet -- også hvis spilleren har været væk i dagevis (aldrig en uendelig løkke).
+	local totalPlads = 0
+	for _, b in plotBuckets do
+		if b.part.Parent then
+			totalPlads += math.max(b.capacity - #b.list, 0)
+		end
+	end
+	for _, post in placedItems[spiller] or {} do
+		if post.offline then
+			totalPlads += math.max(post.offline.kapacitet(), 0)   -- fisker lige oprettet -> tom
+		end
+	end
+	if totalPlads <= 0 then return end          -- ingen placerede fiskere/spande -> intet at fange
+
+	for _, post in placedItems[spiller] or {} do
+		local o = post.offline
+		if o then
+			local ventetid = o.ventetid()
+			if ventetid and ventetid > 0 then
+				-- hvor mange fisk DENNE fisker ville have fanget, men aldrig mere end der er plads
+				local antalFisk = math.min(math.floor(produktivTid / ventetid) * o.fishPerCatch, totalPlads)
+				for _ = 1, antalFisk do
+					local fisk = o.rul()
+					if fisk then
+						-- Fordel som online: første ledige spand (i rækkefølge), ellers fiskeren selv
+						local spand = foersteLedigeSpand()
+						if spand then
+							table.insert(spand.list, fisk)
+							spand.part:SetAttribute("Indhold", #spand.list)
+						elseif not o.laegISelv(fisk) then
+							break   -- alle spande OG denne fisker er fulde -> videre til næste fisker
+						end
+					end
+				end
+			end
+		end
 	end
 end
 
@@ -1228,6 +1300,10 @@ local function haandterJoin(spiller)
 			warn("[Data] Gemt data for " .. spiller.Name .. " kunne ikke læses -- gemning slået fra.")
 			return
 		end
+
+		-- OFFLINE-INDTJENING: simulér fangst for tiden siden sidste logout (server-side, ved load)
+		local elapsed = os.time() - (gemt.lastLogout or os.time())
+		pcall(simulerOffline, spiller, elapsed)
 	end
 	-- ny spiller (gemt == nil) beholder bare standardværdierne
 	dataLoaded[spiller] = true
