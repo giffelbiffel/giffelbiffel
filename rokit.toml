@@ -1,0 +1,6 @@
+# rokit.toml
+# Rokit er et lille program, der henter de værktøjer, dit projekt skal bruge.
+# Her beder vi om Rojo. Når du skriver "rokit install", henter den den rigtige version.
+
+[tools]
+rojo = "rojo-rbx/rojo@7.5.1"
