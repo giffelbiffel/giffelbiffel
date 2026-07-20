@@ -432,6 +432,17 @@ local function foersteLedigeSpand()
 	return nil
 end
 
+-- === HAMMER / FJERN-VÆRKTØJ ===
+-- fjernPlaceret tildeles i DataStore-sektionen (hvor genskabTool findes). Forward-
+-- declaration her, så fisker/spand-klik kan referere den (upvalue løses ved klik-tid).
+local fjernPlaceret
+
+local function harHammerEquipped(spiller)
+	-- Equippede tools ligger i Character. Har spilleren Hammeren i hånden?
+	return spiller.Character ~= nil and spiller.Character:FindFirstChild("Hammer") ~= nil
+end
+
+
 -- === OPSKRIFT: lav én fisker ud fra en config-blok ===
 local function lavFisker(def, position, ejer)
 	local fisker = Instance.new("Part")
@@ -507,7 +518,11 @@ local function lavFisker(def, position, ejer)
 	klik.MaxActivationDistance = 40
 	klik.Parent = fisker
 	klik.MouseClick:Connect(function(spiller)
-		sendUpgradeStatus(spiller, def.name)
+		if harHammerEquipped(spiller) then
+			if fjernPlaceret then fjernPlaceret(spiller, fisker) end   -- HAMMER: fjern fiskeren
+		else
+			sendUpgradeStatus(spiller, def.name)                       -- normal: åbn upgrade-menu
+		end
 	end)
 
 	local skilt = Instance.new("BillboardGui")
@@ -630,6 +645,16 @@ local function lavBucket(position)
 	bucket.BrickColor = BrickColor.new("Bright yellow")   -- gul, så den skiller sig ud
 	bucket.Parent = workspace
 	bucket:SetAttribute("Indhold", 0)
+
+	-- Klik med hammeren equipped -> fjern spanden (ingen menu ellers)
+	local bucketKlik = Instance.new("ClickDetector")
+	bucketKlik.MaxActivationDistance = 40
+	bucketKlik.Parent = bucket
+	bucketKlik.MouseClick:Connect(function(spiller)
+		if harHammerEquipped(spiller) and fjernPlaceret then
+			fjernPlaceret(spiller, bucket)
+		end
+	end)
 
 	local bucketList = {}   -- de individuelle fisk i spanden
 
@@ -1076,6 +1101,53 @@ local function genskabTool(backpack, entry)
 
 	tool.Parent = backpack
 end
+
+-- FJERN en placeret fisker/spand -> tilbage i backpacken som et tool (samme som køb).
+-- Ejerskabstjek: vi leder KUN i spillerens EGNE placedItems, så man kan ikke fjerne andres.
+fjernPlaceret = function(spiller, part)
+	local liste = placedItems[spiller]
+	if not liste then return end
+	for i, post in liste do
+		if post.part == part then
+			local backpack = spiller:FindFirstChildOfClass("Backpack")
+			if backpack then
+				if post.kind == "bucket" then
+					genskabTool(backpack, { kind = "bucket", robux = post.robux })
+				elseif post.kind == "fisher" then
+					local index
+					for idx, d in FisherConfig.fishers do
+						if d.name == post.name then index = idx break end
+					end
+					if index then
+						genskabTool(backpack, { kind = "fisher", index = index, robux = post.robux })
+					end
+				end
+			end
+			part:Destroy()             -- væk fra plottet (3D-verdenen)
+			table.remove(liste, i)     -- ikke længere "placeret" -> serialize gemmer den nu som backpack-post
+			return
+		end
+	end
+end
+
+-- Giv den PERMANENTE Hammer via StarterGear. Motoren kopierer StarterGear ind i
+-- Backpacken ved HVERT spawn (slot 1, kan ikke bruges op) -- overlever spawn-wipe.
+local function givHammer(spiller)
+	local starterGear = spiller:WaitForChild("StarterGear", 10)
+	if starterGear and not starterGear:FindFirstChild("Hammer") then
+		local hammer = Instance.new("Tool")
+		hammer.Name = "Hammer"
+		hammer.RequiresHandle = false
+		hammer.CanBeDropped = false
+		hammer.ToolTip = "Click a fisher or bucket on your plot to remove it"
+		hammer:SetAttribute("IsHammer", true)
+		hammer.Parent = starterGear
+	end
+end
+for _, spiller in Players:GetPlayers() do
+	task.spawn(givHammer, spiller)
+end
+Players.PlayerAdded:Connect(givHammer)
 
 -- Saml spillerens NUVÆRENDE tilstand til en gemme-tabel (kun rene tal/tekst -- DataStore-venligt)
 local function serialize(spiller)
