@@ -37,6 +37,11 @@ local upgradeEvent = Instance.new("RemoteEvent")
 upgradeEvent.Name = "Upgrade"
 upgradeEvent.Parent = ReplicatedStorage
 
+-- Walkie-talkie til hammeren (client sender den ramte del, serveren fjerner den)
+local removeEvent = Instance.new("RemoteEvent")
+removeEvent.Name = "RemovePlaced"
+removeEvent.Parent = ReplicatedStorage
+
 -- Walkie-talkie til coin-popup ved salg (ren visuel besked: "du tjente X")
 local sellPopup = Instance.new("RemoteEvent")
 sellPopup.Name = "SellPopup"
@@ -518,11 +523,7 @@ local function lavFisker(def, position, ejer)
 	klik.MaxActivationDistance = 40
 	klik.Parent = fisker
 	klik.MouseClick:Connect(function(spiller)
-		if harHammerEquipped(spiller) then
-			if fjernPlaceret then fjernPlaceret(spiller, fisker) end   -- HAMMER: fjern fiskeren
-		else
-			sendUpgradeStatus(spiller, def.name)                       -- normal: åbn upgrade-menu
-		end
+		sendUpgradeStatus(spiller, def.name)
 	end)
 
 	local skilt = Instance.new("BillboardGui")
@@ -645,16 +646,6 @@ local function lavBucket(position)
 	bucket.BrickColor = BrickColor.new("Bright yellow")   -- gul, så den skiller sig ud
 	bucket.Parent = workspace
 	bucket:SetAttribute("Indhold", 0)
-
-	-- Klik med hammeren equipped -> fjern spanden (ingen menu ellers)
-	local bucketKlik = Instance.new("ClickDetector")
-	bucketKlik.MaxActivationDistance = 40
-	bucketKlik.Parent = bucket
-	bucketKlik.MouseClick:Connect(function(spiller)
-		if harHammerEquipped(spiller) and fjernPlaceret then
-			fjernPlaceret(spiller, bucket)
-		end
-	end)
 
 	local bucketList = {}   -- de individuelle fisk i spanden
 
@@ -1129,6 +1120,13 @@ fjernPlaceret = function(spiller, part)
 		end
 	end
 end
+
+-- Client klikkede med hammeren -> fjern den ramte del (server validerer)
+removeEvent.OnServerEvent:Connect(function(spiller, part)
+	if typeof(part) ~= "Instance" or not part:IsA("BasePart") then return end
+	if not harHammerEquipped(spiller) then return end   -- skal faktisk holde hammeren
+	fjernPlaceret(spiller, part)                          -- ejerskabstjek sker inde i fjernPlaceret
+end)
 
 -- Giv den PERMANENTE Hammer via StarterGear. Motoren kopierer StarterGear ind i
 -- Backpacken ved HVERT spawn (slot 1, kan ikke bruges op) -- overlever spawn-wipe.
